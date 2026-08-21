@@ -3,7 +3,6 @@
 I was bored of the discovery weekly and of my usual songs so I made this.
 This app will recommend daily a new song that you hopefully have never heard before, based on what you have already listened to.
 YOU NEED AT LEAST AN ACCOUNT WITH SPOTIFY PREMIUM TO USE THIS.
-Example:
 ![The daily recommendation](docs/screenshots/card.png)
 
 
@@ -19,7 +18,8 @@ Every day you can click on Daily recommendation and it will search for a song cl
 - **Customizable.** Every genre can be set to always, never or neutral, you can add
   genres by hand and decide what songs that have been found in your recents/saved count.
 
-![Settings](docs/screenshots/settings.png)
+![Settings1](docs/screenshots/settings1.png)
+![Settings2](docs/screenshots/settings2.png)
 
 ## Getting it running
 
@@ -68,11 +68,14 @@ or
 
 run the app through python in the terminal in the app's folder:
 ```
-python3 src/app.py #for Linux and MacOS
+python3 src/app.py #
 ```
+for Linux and MacOS
+
 ```
-py src/app.py #for windows
+py src/app.py #
 ```
+for Windows
 
 The first screen asks for the two keys. They are checked against Spotify and Last.fm before anything is stored: a wrong one is marked **not valid**
 in red and nothing is saved until it works.
@@ -83,8 +86,6 @@ in red and nothing is saved until it works.
 ### 5. First run
 
 On the first run it will ask you to login, you will need to do this only once if everything goes right, then you will be asked your preferences for the daily recommendation.
-
-![First run](docs/screenshots/welcome.png)
 
 
 ## Daily use
