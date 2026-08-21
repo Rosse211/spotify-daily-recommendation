@@ -4,6 +4,7 @@ I was bored of the discovery weekly and of my usual songs so I made this.
 This app will recommend daily a new song that you hopefully have never heard before, based on what you have already listened to.
 YOU NEED AT LEAST AN ACCOUNT WITH SPOTIFY PREMIUM TO USE THIS.
 You also need python 3.9 at least.
+
 ![The daily recommendation](docs/screenshots/card.png)
 
 
@@ -56,6 +57,7 @@ You have to create yours, this also means that you can invite up to 4 people tha
 ### 3. Get a Last.fm API key
 
 1. Go to <https://www.last.fm/api/account/create>.
+
 ![Last.fm](docs/screenshots/lastfm.png)
 2. Name and description can be anything. Callback URL and homepage can be left empty.
 3. The key appears immediately on the next page, copy it.
@@ -156,12 +158,12 @@ If you want to invite friends you just need to add them in the Spotify Developer
 ## License
 
 [PolyForm Noncommercial 1.0.0](LICENSE). Use it, change it, build on it, redistribute it —
-as long as it is not for commercial purposes. Personal use, hobby projects, study, research, schools and charities are all covered.
+as long as it is not for commercial purposes. Personal use, hobby projects and everything similar is allowed.
 
 
 ## Requirements
 
-- **Python 3.9 or newer** Standard library only (if you add python.exe to the PATH you can use py/python3 to open the app from the terminal)
+- **Python 3.9 or newer** only the standard library is needed (if you add python.exe to the PATH you can use py/python3 to open the app from the terminal).
 - **A Premium Spotify account**.
 - **A Spotify client ID** and a **Last.fm API key**, both free, tutorial above.
 - **A browser**, for the interface and the one-time login.
