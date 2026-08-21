@@ -1,0 +1,379 @@
+<!doctype html><meta charset=utf-8><title>Settings</title>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<style>
+:root{color-scheme:dark;--bg:#0b0b0d;--fg:#f2f2f4;--dim:#84848c;--accent:#1db954;--no:#e0455c;--purple:#9d6bff}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;padding:26px 20px 60px;background:var(--bg);color:var(--fg);
+     font:400 15px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif}
+main{max-width:560px;margin:0 auto}
+a{color:var(--dim);text-decoration:none;font-size:14px}
+a:hover{color:var(--fg)}
+button{border:0;background:none;color:inherit;font:inherit;cursor:pointer}
+h1{font-size:20px;font-weight:600;margin:18px 0 26px}
+h2{font-size:13px;font-weight:600;color:var(--dim);letter-spacing:.09em;text-transform:uppercase;
+   margin:0}
+.head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px}
+.act{font-size:13px;color:var(--dim);padding:5px 10px;border-radius:7px;transition:.15s}
+.act:hover{background:#ffffff14;color:var(--fg)}
+.act.on{background:#ffffff1a;color:var(--fg)}
+.icon{display:grid;place-items:center;width:30px;height:30px;padding:0}
+.icon svg{width:17px;height:17px;fill:currentColor}
+.icon.on{background:#1db95424;color:var(--accent)}
+section{margin-bottom:34px}
+.legend{display:flex;gap:16px;margin:0 0 12px;color:var(--dim);font-size:11.5px}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;
+          vertical-align:middle;background:#ffffff33}
+.legend .in i{background:var(--accent)}
+.legend .out i{background:var(--no)}
+.list{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow:auto}
+.g{display:flex;align-items:center;gap:10px;padding:10px 13px;border-radius:10px;
+   background:#ffffff0a;border-left:3px solid #ffffff26;cursor:pointer;user-select:none;
+   font-size:14.5px;transition:background .18s,border-color .18s,opacity .18s}
+.g:hover{background:#ffffff14}
+.g.in{border-left-color:var(--accent);background:#1db9541f}
+.g.out{border-left-color:var(--no);background:#e0455c14;opacity:.55}
+.g .n{margin-left:auto;color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums}
+.g .x{margin-left:auto;color:var(--no);font-size:16px;padding:0 4px}
+.g.extra{border-left-color:#7aa2f7;background:#7aa2f714}
+.t{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;cursor:pointer;
+   font-size:13.5px;transition:background .12s}
+.t:hover{background:#ffffff0d}
+.t.off{color:#5a5a62;text-decoration:line-through}
+.box{width:17px;height:17px;border-radius:5px;border:1.5px solid #ffffff30;flex:none;
+     display:grid;place-items:center;color:#000;background:var(--accent);border-color:var(--accent);
+     transition:background .15s,border-color .15s}
+.box svg{width:11px;height:11px;fill:currentColor;opacity:1;transition:opacity .15s}
+.t.off .box{background:transparent;border-color:#ffffff30}
+.t.off .box svg{opacity:0}
+.head-row{margin-bottom:6px;font-weight:600;color:var(--dim)}
+.head-row.off{text-decoration:none;color:var(--dim)}
+.list,#tlist{user-select:none}
+.src{margin-left:auto;color:#5a5a62;font-size:11.5px;white-space:nowrap;flex:none;
+     max-width:45%;overflow:hidden;text-overflow:ellipsis}
+input{width:100%;padding:10px 12px;border-radius:9px;border:1px solid #ffffff1f;
+      background:#00000040;color:var(--fg);font:inherit;margin-bottom:8px}
+input:focus{outline:0;border-color:#ffffff3d}
+.f{display:block;margin-top:14px}
+.f span{display:block;font-size:12.5px;color:var(--dim);margin-bottom:6px}
+.f small{display:block;color:#5c5c64;font-size:11.5px;margin-top:-2px}
+.err{display:block;color:var(--no);font-size:12px;font-weight:600;margin:6px 0}
+.f input.bad{border-color:var(--no)}
+#sugg{max-height:220px;gap:4px}
+.s{display:block;width:100%;text-align:left;padding:9px 13px;border-radius:9px;
+   background:#ffffff08;color:var(--dim);font-size:14px;transition:.15s}
+.s:hover{background:#7aa2f72e;color:var(--fg)}
+.s em{font-style:normal;color:var(--fg)}
+.val{color:var(--purple);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;
+     background:#9d6bff24;padding:3px 10px;border-radius:6px}
+.hint{color:var(--dim);font-size:12.5px;margin:0 0 14px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;padding:0;
+                  margin:0;border:0;border-radius:2px;cursor:pointer;--pct:33%;
+                  background:linear-gradient(to right,
+                             var(--purple) 0 var(--pct), #ffffff1f var(--pct) 100%)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;
+                  border-radius:50%;background:var(--fg);cursor:pointer;
+                  box-shadow:0 0 0 4px #9d6bff33}
+input[type=range]::-moz-range-thumb{width:17px;height:17px;border:0;border-radius:50%;
+                  background:var(--fg);cursor:pointer;box-shadow:0 0 0 4px #9d6bff33}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:transparent}
+#newrow{display:flex;align-items:center;justify-content:space-between;gap:11px;padding:13px 14px;
+        border-radius:11px;background:#ffffff0a;cursor:pointer}
+#newrow:hover{background:#ffffff14}
+#newbox{width:19px;height:19px;border-radius:6px;border:1.5px solid #ffffff3d;flex:none;
+        display:grid;place-items:center;color:#000;transition:.18s}
+#newrow.on #newbox{background:var(--accent);border-color:var(--accent)}
+#newbox svg{width:12px;height:12px;fill:currentColor;opacity:0}
+#newrow.on #newbox svg{opacity:1}
+#newrow small{display:block;color:var(--dim);font-size:12px}
+#danger{display:flex;flex-direction:column;gap:10px}
+.danger{text-align:left;padding:13px 15px;border-radius:11px;background:#e0455c14;
+        border:1px solid #e0455c3d;color:var(--no);transition:.18s}
+.danger:hover{background:#e0455c26}
+.danger:disabled{opacity:.5;cursor:default}
+.danger b{display:block;font-size:14.5px;font-weight:600}
+.danger small{display:block;color:var(--dim);font-size:12px;margin-top:3px}
+#msg{position:fixed;left:0;right:0;bottom:0;padding:11px;text-align:center;background:#111114;
+     border-top:1px solid #ffffff14;color:var(--dim);font-size:13px}
+</style>
+<main>
+  <a href="/">&larr; back</a>
+  <h1>Settings</h1>
+
+  <section>
+    <div class=head>
+      <h2>Genres</h2>
+      <button class=act id=edit>edit</button>
+    </div>
+    <div class=legend id=legend>
+      <span><i></i>neutral</span><span class=in><i></i>always</span><span class=out><i></i>never</span>
+    </div>
+    <div class=list id=glist></div>
+    <div id=adder hidden>
+      <input id=q placeholder="add a genre...">
+      <div class=list id=sugg></div>
+    </div>
+  </section>
+
+  <section>
+    <div class=head>
+      <h2>Songs</h2>
+      <button class="act icon" id=sort title="active first">
+        <svg viewBox="0 0 24 24"><path d="M12 3v13.2l-5.6-5.6L5 12l7 7 7-7-1.4-1.4-5.6 5.6V3z"/></svg>
+      </button>
+    </div>
+    <div class="t head-row" id=allrow>
+      <span class=box><svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg></span>
+      <span id=alllabel>all</span>
+    </div>
+    <div class=list id=tlist></div>
+  </section>
+
+  <section>
+    <div class=head>
+      <h2>Obscurity</h2>
+      <span class=val id=obsval>1.0</span>
+    </div>
+    <p class=hint>Where to look. 0 = mostly well known names, 1 = no preference, 3 = songs that are less known</p>
+    <input type=range id=obs min=0 max=3 step=0.1>
+  </section>
+
+  <section>
+    <div class=head><h2>Similar genres</h2></div>
+    <div id=newrow>
+      <div><b>new genres</b></div>
+      <div id=newbox><svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg></div>
+    </div>
+  </section>
+
+  <section>
+    <div class=head><h2>Keys</h2></div>
+    <label class=f><span>Client ID</span><input id=k_sp autocomplete=off spellcheck=false>
+      <b class=err id=e_sp hidden>not valid</b>
+    </label>
+    <label class=f><span>Last.fm API key</span><input id=k_lf autocomplete=off spellcheck=false>
+      <b class=err id=e_lf hidden>not valid</b>
+    </label>
+  </section>
+  <section id=danger>
+    <button class=danger id=logout>
+      <b>Log out and switch account</b>
+      <small>Will remove every song and every preference</small>
+    </button>
+    <button class=danger id=wipe>
+      <b>Reset preferences</b>
+      <small>Only likes/dislikes</small>
+    </button>
+    <button class=danger id=reload>
+      <b>Reload my library</b>
+      <small>Reads again your top tracks, saved tracks and playlists from Spotify.
+        Takes a few minutes. Your settings will stay.</small>
+    </button>
+  </section>
+</main>
+<p id=msg>saved automatically</p>
+<script>
+const $ = i => document.getElementById(i);
+const CYCLE = {'': 'in', 'in': 'out', 'out': ''};
+let d = {}, editing = false, byActive = false, suggestions = [];
+
+async function save() {
+  $('msg').textContent = 'saving...';
+  await fetch('/api/settings', {method: 'POST', body: JSON.stringify(d)});
+  $('msg').textContent = 'saved';
+}
+
+function drawGenres() {
+  $('glist').innerHTML = '';
+  $('legend').hidden = editing;
+  $('adder').hidden = !editing;
+  for (const b of d.buckets) {
+    const [name, n, state] = b;
+    const el = document.createElement('div');
+    el.className = 'g ' + (editing ? '' : state) + (d.extra.includes(name) ? ' extra' : '');
+    const label = document.createElement('span');
+    label.textContent = name;
+    el.appendChild(label);
+    if (editing) {
+      const x = document.createElement('button');
+      x.className = 'x'; x.textContent = '\u00d7';
+      x.onclick = e => {
+        e.stopPropagation();
+        d.buckets = d.buckets.filter(o => o[0] !== name);
+        d.removed = (d.removed || []).concat([name]);
+        d.extra = d.extra.filter(o => o !== name);
+        drawGenres(); save();
+      };
+      el.appendChild(x);
+    } else {
+      const c = document.createElement('span');
+      c.className = 'n'; c.textContent = n;
+      el.appendChild(c);
+      el.onclick = () => { b[2] = CYCLE[b[2]]; drawGenres(); save(); };
+    }
+    $('glist').appendChild(el);
+  }
+  drawSuggestions();
+}
+
+function drawSuggestions() {
+  const q = $('q').value.trim().toLowerCase();
+  $('sugg').innerHTML = '';
+  if (!q) return;
+  const have = new Set(d.buckets.map(b => b[0].toLowerCase()));
+  const hit = t => t.toLowerCase().includes(q) && !have.has(t.toLowerCase());
+  const starts = suggestions.filter(t => hit(t) && t.toLowerCase().startsWith(q));
+  const rest = suggestions.filter(t => hit(t) && !t.toLowerCase().startsWith(q));
+  const list = starts.concat(rest).slice(0, 12);
+  if (!list.some(t => t.toLowerCase() === q) && !have.has(q)) list.push($('q').value.trim());
+  for (const t of list) {
+    const b = document.createElement('button');
+    b.className = 's';
+    const i = t.toLowerCase().indexOf(q);
+    b.innerHTML = i < 0 ? '' : `${t.slice(0, i)}<em>${t.slice(i, i + q.length)}</em>${t.slice(i + q.length)}`;
+    if (i < 0) b.textContent = t;
+    b.onclick = () => addGenre(t);
+    $('sugg').appendChild(b);
+  }
+}
+
+async function addGenre(name) {
+  $('msg').textContent = 'checking ' + name + '...';
+  const r = await (await fetch('/api/addtag?t=' + encodeURIComponent(name))).json();
+  if (!r.ok) { $('msg').textContent = 'no such genre on Last.fm: ' + name; return; }
+  d.buckets.unshift([r.name, 0, 'in']);
+  d.extra = d.extra.concat([r.name]);
+  d.removed = (d.removed || []).filter(o => o !== r.name);
+  $('q').value = '';
+  drawGenres(); save();
+}
+
+const TICK = '<svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>';
+let shown = [], dragTo = null;
+
+function setRow(row, el, on) {
+  if (row[2] === on) return;
+  row[2] = on;
+  d.overrides = d.overrides || {};
+  d.overrides[row[0]] = on;
+  el.className = 't' + (on ? '' : ' off');
+  refreshAll();
+}
+
+function refreshAll() {
+  const every = shown.length && shown.every(r => r[2]);
+  $('allrow').className = 't head-row' + (every ? '' : ' off');
+  $('alllabel').textContent = `all (${shown.filter(r => r[2]).length}/${shown.length})`;
+}
+
+function drawTracks() {
+  shown = d.tracks.slice();
+  if (byActive) shown.sort((a, b) => (b[2] - a[2]) || a[1].toLowerCase().localeCompare(b[1].toLowerCase()));
+  $('tlist').innerHTML = '';
+  for (const row of shown) {
+    const el = document.createElement('div');
+    el.className = 't' + (row[2] ? '' : ' off');
+    el.innerHTML = '<span class=box>' + TICK + '</span>';
+    const txt = document.createElement('span'); txt.textContent = row[1];
+    const src = document.createElement('span'); src.className = 'src'; src.textContent = row[3].join(', ');
+    el.append(txt, src);
+    el.onmousedown = e => { e.preventDefault(); dragTo = !row[2]; setRow(row, el, dragTo); };
+    el.onmouseenter = () => { if (dragTo !== null) setRow(row, el, dragTo); };
+    $('tlist').appendChild(el);
+  }
+  refreshAll();
+}
+
+document.addEventListener('mouseup', () => {
+  if (dragTo === null) return;
+  dragTo = null;
+  save();
+});
+
+$('allrow').onclick = () => {
+  const every = shown.every(r => r[2]);
+  for (const row of shown) {
+    row[2] = !every;
+    d.overrides = d.overrides || {};
+    d.overrides[row[0]] = !every;
+  }
+  drawTracks();
+  save();
+};
+
+$('edit').onclick = () => {
+  editing = !editing;
+  $('edit').classList.toggle('on', editing);
+  $('edit').textContent = editing ? 'done' : 'edit';
+  drawGenres();
+};
+$('sort').onclick = () => {
+  byActive = !byActive;
+  $('sort').classList.toggle('on', byActive);
+  drawTracks();
+};
+$('q').oninput = drawSuggestions;
+$('q').onkeydown = e => { if (e.key === 'Enter' && $('q').value.trim()) addGenre($('q').value.trim()); };
+function paintSlider() {
+  const o = $('obs');
+  o.style.setProperty('--pct', ((o.value - o.min) / (o.max - o.min)) * 100 + '%');
+}
+$('obs').oninput = () => {
+  d.obscurity = parseFloat($('obs').value);
+  $('obsval').textContent = d.obscurity.toFixed(1);
+  paintSlider();
+};
+$('obs').onchange = save;
+$('newrow').onclick = () => {
+  d.new = !d.new;
+  $('newrow').classList.toggle('on', d.new);
+  save();
+};
+
+async function saveKeys() {
+  $('msg').textContent = 'checking...';
+  const r = await (await fetch('/api/keys', {method: 'POST', body: JSON.stringify(
+    {spotify_client_id: $('k_sp').value, lastfm_api_key: $('k_lf').value})})).json();
+  $('e_sp').hidden = r.spotify;
+  $('e_lf').hidden = r.lastfm;
+  $('k_sp').classList.toggle('bad', !r.spotify);
+  $('k_lf').classList.toggle('bad', !r.lastfm);
+  $('msg').textContent = r.ok ? 'saved' : 'not saved, a key is not valid';
+}
+$('k_sp').onchange = saveKeys;
+$('k_lf').onchange = saveKeys;
+
+async function danger(button, endpoint, question, working) {
+  if (!confirm(question)) return;
+  document.querySelectorAll('.danger').forEach(b => b.disabled = true);
+  $('msg').textContent = working;
+  const r = await (await fetch('/api/' + endpoint)).json();
+  document.querySelectorAll('.danger').forEach(b => b.disabled = false);
+  $('msg').textContent = r.error || 'done';
+  if (!r.error) location.reload();
+}
+$('logout').onclick = async () => {
+  if (!confirm('Log out and erase everything this account left behind?')) return;
+  await fetch('/api/logout');
+  location.href = '/';
+};
+$('wipe').onclick = () => danger($('wipe'), 'reset-feedback',
+  'Forget every like and dislike?', 'clearing...');
+$('reload').onclick = () => danger($('reload'), 'reload-library',
+  'Read your whole Spotify library again? May take a few minutes.', 'reading Spotify...');
+
+(async () => {
+  const k = await (await fetch('/api/keys')).json();
+  $('k_sp').value = k.spotify_client_id;
+  $('k_lf').value = k.lastfm_api_key;
+  d = await (await fetch('/api/settings')).json();
+  d.extra = d.extra || [];
+  suggestions = await (await fetch('/api/tags')).json();
+  $('newrow').classList.toggle('on', d.new);
+  $('obs').value = d.obscurity;
+  $('obsval').textContent = d.obscurity.toFixed(1);
+  paintSlider();
+  drawGenres(); drawTracks();
+  $('msg').textContent = 'changes save automatically';
+})();
+</script>
