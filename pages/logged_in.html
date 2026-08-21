@@ -1,0 +1,24 @@
+<!doctype html><meta charset=utf-8><title>{{title}}</title>
+<meta name=viewport content="width=device-width,initial-scale=1">
+{{refresh}}
+<style>
+:root{color-scheme:dark;--bg:#0b0b0d;--fg:#f2f2f4;--dim:#84848c;--accent:#1db954;--no:#e0455c}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--fg);
+     font:400 16px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif;text-align:center}
+main{width:320px}
+.badge{width:64px;height:64px;margin:0 auto 22px;border-radius:50%;display:grid;place-items:center;
+       background:{{tint}}22}
+.badge svg{width:30px;height:30px;fill:{{tint}}}
+h1{font-size:22px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px}
+p{color:var(--dim);font-size:14px;margin:0}
+a{display:inline-block;margin-top:22px;padding:12px 22px;border-radius:999px;background:var(--fg);
+  color:#000;text-decoration:none;font-weight:600;font-size:14px;transition:transform .15s}
+a:hover{transform:translateY(-1px)}
+</style>
+<main>
+  <div class=badge>{{icon}}</div>
+  <h1>{{title}}</h1>
+  <p>{{note}}</p>
+  <a href="http://127.0.0.1:8080">Back to the app</a>
+</main>
