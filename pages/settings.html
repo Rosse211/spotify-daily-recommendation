@@ -103,7 +103,7 @@ input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:tran
   <section>
     <div class=head>
       <h2>Genres</h2>
-      <button class=act id=edit>edit</button>
+      <button class=act id=edit>edit/add</button>
     </div>
     <div class=legend id=legend>
       <span><i></i>neutral</span><span class=in><i></i>always</span><span class=out><i></i>never</span>
@@ -157,8 +157,8 @@ input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:tran
   </section>
   <section id=danger>
     <button class=danger id=logout>
-      <b>Log out and switch account</b>
-      <small>Will remove every song and every preference</small>
+      <b>Log out</b>
+      <small>Will remove every song and every preference, you can log back in anytime</small>
     </button>
     <button class=danger id=wipe>
       <b>Reset preferences</b>
@@ -225,7 +225,6 @@ function drawSuggestions() {
   const starts = suggestions.filter(t => hit(t) && t.toLowerCase().startsWith(q));
   const rest = suggestions.filter(t => hit(t) && !t.toLowerCase().startsWith(q));
   const list = starts.concat(rest).slice(0, 12);
-  if (!list.some(t => t.toLowerCase() === q) && !have.has(q)) list.push($('q').value.trim());
   for (const t of list) {
     const b = document.createElement('button');
     b.className = 's';

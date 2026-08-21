@@ -99,7 +99,7 @@ h1{font-size:21px;font-weight:600;letter-spacing:-.01em;margin:22px 0 3px}
 #back:hover{color:var(--fg)}
 </style>
 <div id=glow></div>
-<a href="/settings" id=gear title=Settings>
+<a href="/settings" id=gear title=Settings hidden>
   <svg viewBox="0 0 24 24"><path d="M19.4 13a7.8 7.8 0 0 0 0-2l2-1.6-2-3.4-2.5 1a7.6 7.6 0 0 0-1.7-1L14.8 3h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.4L6.6 11a7.8 7.8 0 0 0 0 2l-2 1.6 2 3.4 2.5-1c.5.4 1.1.8 1.7 1l.4 2.6h4l.4-2.6c.6-.2 1.2-.6 1.7-1l2.5 1 2-3.4zm-6.6 2.4a3.4 3.4 0 1 1 0-6.8 3.4 3.4 0 0 1 0 6.8z"/></svg>
 </a>
 <main>
@@ -183,6 +183,18 @@ $('play').onclick = () => {
   else { audio.pause(); $('pp').setAttribute('d', 'M8 5v14l11-7z'); }
 };
 $('newrow').onclick = () => $('newrow').classList.toggle('on');
+
+async function sendToSpotify(win) {
+  for (let i = 0; i < 50; i++) {
+    const p = await (await fetch('/api/pending')).json();
+    if (p.url) {
+      if (win) win.location = p.url; else window.open(p.url, 'spotify-login');
+      return true;
+    }
+    await new Promise(r => setTimeout(r, 200));
+  }
+  return false;
+}
 function paintSlider() {
   const o = $('obs');
   o.style.setProperty('--pct', ((o.value - o.min) / (o.max - o.min)) * 100 + '%');
@@ -208,8 +220,8 @@ function show(r) {
   requestAnimationFrame(() => $('card').classList.add('in'));
 }
 
-async function call(ep) {
-  $('msg').textContent = 'Searching\u2026';
+async function call(ep, working) {
+  $('msg').textContent = working || 'Searching\u2026';
   const r = await (await fetch('/api/' + ep)).json();
   $('msg').textContent = r.error || '';
   return r;
@@ -242,7 +254,7 @@ function showStep(n) {
 $('back').onclick = () => { $('msg').textContent = ''; showStep(step - 1); };
 
 async function drawSetup() {
-  $('msg').textContent = 'Analysing your listening\u2026';
+  $('msg').textContent = 'Analysing your listening, this may take a moment\u2026';
   const g = await (await fetch('/api/genres?source=' + source)).json();
   $('msg').textContent = g.error || '';
   if (g.error) return;
@@ -273,6 +285,7 @@ async function boot() {
                          today: 'Daily recommendation'}[mode];
   $('go').hidden = false;
   $('back').hidden = true;
+  $('gear').hidden = mode !== 'today';
   if (mode === 'keys') {
     const k = await (await fetch('/api/keys')).json();
     $('k_sp').value = k.spotify_client_id;
@@ -303,8 +316,13 @@ $('go').onclick = async () => {
     return;
   }
   if (mode === 'login') {
-    $('msg').textContent = 'Check your browser, reading your playlists\u2026';
-    const r = await call('login');
+    const spotify = window.open('', 'spotify-login', 'width=520,height=720');
+    const wait = call('login', 'Waiting for Spotify\u2026');
+    if (await sendToSpotify(spotify)) {
+      $('msg').textContent = 'Approve in the Spotify window, then wait\u2026';
+    }
+    const r = await wait;
+    if (r.pending) sendToSpotify(window.open('', 'spotify-login'));
     $('go').disabled = false;
     if (!r.error) boot();
     return;

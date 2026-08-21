@@ -39,6 +39,8 @@ TOKENS = DATA / "tokens.json"
 REDIRECT = "http://127.0.0.1:8888/callback"
 SCOPES = "user-top-read playlist-read-private user-library-read"
 LOGIN_TIMEOUT = 300
+PENDING = {"url": None}
+OPEN_BROWSER = True
 
 
 
@@ -73,8 +75,8 @@ def _result_page(title, note, ok=True):
             .replace("{{note}}", note)
             .replace("{{icon}}", TICK if ok else CROSS)
             .replace("{{tint}}", "#1db954" if ok else "#e0455c")
-            .replace("{{refresh}}",
-                     '<meta http-equiv=refresh content="2;url=http://127.0.0.1:8080">'
+            .replace("{{fallback}}",
+                     "setTimeout(() => location.href = 'http://127.0.0.1:8080', 1800);"
                      if ok else ""))
 
 
@@ -101,9 +103,14 @@ def _capture_code(url):
     with http.server.HTTPServer(("127.0.0.1", 8888), H) as srv:
         srv.timeout = LOGIN_TIMEOUT
         print("Opening the browser to log in\u2026")
-        webbrowser.open(url)
+        PENDING["url"] = url
+        if OPEN_BROWSER:
+            webbrowser.open(url)
         print(f"If it does not open, go to:\n{url}\n")
-        srv.handle_request()
+        try:
+            srv.handle_request()
+        finally:
+            PENDING["url"] = None
     if not got:
         sys.exit("Timed out waiting for the Spotify login.")
     if "error" in got:

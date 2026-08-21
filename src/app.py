@@ -589,7 +589,7 @@ def page(name):
 
 def same_origin(handler):
     site = handler.headers.get("Sec-Fetch-Site")
-    if site and site not in ("same-origin", "none"):
+    if site and site not in ("same-origin", "same-site", "none"):
         return False
     origin = handler.headers.get("Origin")
     return not origin or origin in (f"http://{handler.headers.get('Host', '')}",)
@@ -666,9 +666,20 @@ class Handler(BaseHTTPRequestHandler):
                      "new": saved.get("new", False), "source": source,
                      "obscurity": float(saved.get("obscurity", 2.0))},
                     ensure_ascii=False))
+            if self.path == "/api/pending":
+                return self._send(json.dumps({"url": sp.PENDING["url"]}))
             if self.path == "/api/login":
-                with WRITER:
+                if not WRITER.acquire(blocking=False):
+                    waiting = sp.PENDING["url"]
+                    if waiting:
+                        return self._send(json.dumps(
+                            {"error": "Finish the login in the Spotify window.",
+                             "pending": waiting}))
+                    return self._send(json.dumps({"error": "Busy, try again in a moment."}))
+                try:
                     sp.main()
+                finally:
+                    WRITER.release()
                 return self._send(json.dumps({"ready": True}))
             if self.path == "/api/today":
                 with WRITER:
@@ -732,6 +743,9 @@ def already_running():
         return probe.connect_ex(("127.0.0.1", PORT)) == 0
     finally:
         probe.close()
+
+
+sp.OPEN_BROWSER = False
 
 
 def main():

@@ -48,7 +48,7 @@ in a terminal opened in the folder where you want the app to be installed.
 
 4. Tick **Web API**, save, then open **Settings** and copy the **Client ID**.
 
-You need to do this to run the app because spotify doesn't allow more than 5 people to register on my developer app. 
+You need to do this to run the app because spotify doesn't allow more than 5 people on my developer app. 
 You have to create yours, this also means that you can invite up to 4 people that don't need to have spotify premium(tutorial below under Invite Friends).
 
 
