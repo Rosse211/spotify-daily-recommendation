@@ -161,7 +161,7 @@ as long as it is not for commercial purposes. Personal use, hobby projects, stud
 
 ## Requirements
 
-- **Python 3.9 or newer** Standard library only, add python.exe to the PATH.
+- **Python 3.9 or newer** Standard library only (if you add python.exe to the PATH you can use py/python3 to open the app from the terminal)
 - **A Premium Spotify account**.
 - **A Spotify client ID** and a **Last.fm API key**, both free, tutorial above.
 - **A browser**, for the interface and the one-time login.
