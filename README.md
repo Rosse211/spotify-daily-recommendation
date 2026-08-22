@@ -3,7 +3,7 @@
 I was bored of the discovery weekly and of my usual songs so I made this.
 This app will recommend daily a new song that you hopefully have never heard before, based on what you have already listened to.
 YOU NEED AT LEAST AN ACCOUNT WITH SPOTIFY PREMIUM TO USE THIS.
-You also need python 3.9 at least.
+You also need python(at least 3.9 recommended latest release, you can download it at https://www.python.org/downloads/).
 
 ![The daily recommendation](docs/screenshots/card.png)
 
