@@ -152,7 +152,9 @@ def lang_of(name):
 
 
 DEEZER = DATA / "deezer.json"
+SEARCHED = DATA / "deezer_artists.json"
 _genre_of = None
+_searched = None
 _found = {}
 
 
@@ -190,11 +192,20 @@ def artist_genre(deezer_id):
     return cache[deezer_id]
 
 
+def search_cache():
+    global _searched
+    if _searched is None:
+        _searched = load(SEARCHED, {})
+    return _searched
+
+
 def find_artist(name):
-    if name not in _found:
+    cache = search_cache()
+    if name not in cache:
         hit = dz("search/artist", q=name, limit=1).get("data")
-        _found[name] = hit[0]["id"] if hit else None
-    return _found[name]
+        cache[name] = hit[0]["id"] if hit else None
+        SEARCHED.write_text(json.dumps(cache, ensure_ascii=False, indent=0), encoding="utf-8")
+    return cache[name]
 
 
 def related_of(deezer_id):
