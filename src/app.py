@@ -40,6 +40,8 @@ def dz(path, **params):
         try:
             r = json.load(urllib.request.urlopen(req, timeout=15))
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
+            if isinstance(e, urllib.error.HTTPError) and e.code < 500:
+                raise
             if attempt == 4:
                 raise RuntimeError(f"Deezer unreachable on {path}: {e}") from e
             time.sleep(2 ** attempt)
@@ -230,7 +232,6 @@ def all_tracks(seeds):
 
 
 def is_active(track_key, in_source, overrides):
-    """A track counts unless you switched it off, or on, by hand."""
     return overrides.get(track_key, in_source)
 
 
@@ -365,8 +366,8 @@ def read_prefs():
 
 def pick(avoid_bucket=None):
     seeds = json.loads((DATA / "seeds.json").read_text(encoding="utf-8"))
-    known = json.loads((DATA / "known.json").read_text(encoding="utf-8"))
-    known_a, known_t = set(known["artists"]), set(known["tracks"])
+    known = load(DATA / "known.json", {})
+    known_a, known_t = set(known.get("artists", [])), set(known.get("tracks", []))
     seen = set(load(HISTORY, []))
     seen_artists = {k.split(" — ")[0] for k in seen}
     prefs, genres = read_prefs()
@@ -490,9 +491,9 @@ def lastfm_genres():
     cached = load(ARTISTS, {})
     artist_names = {n.lower() for n in cached}
     seen = {}
-    for info in cached.values():
+    for name, info in cached.items():
         for t in info.get("tags", []):
-            seen.setdefault(t.lower(), set()).add(id(info))
+            seen.setdefault(t.lower(), set()).add(name)
     names = {pretty_genre(t) for t, on in seen.items() if len(on) >= 2}
 
     key = lastfm_key()
@@ -536,7 +537,7 @@ def check_lastfm_key(key):
         return False
     except Exception as e:
         warn("Last.fm key check", e)
-        return True
+        return None
 
 
 def check_keys(spotify_id, lastfm):
@@ -568,8 +569,7 @@ def settings_data():
     removed = set(prefs.get("removed", []))
     states = prefs.get("states", {b: "in" for b in genres["top"]})
     seeds = json.loads((DATA / "seeds.json").read_text(encoding="utf-8"))
-    known = json.loads((DATA / "known.json").read_text(encoding="utf-8"))
-    sources = known.get("sources", {})
+    sources = load(DATA / "known.json", {}).get("sources", {})
     saved = {sp.key(t["artist"], t["title"]) for t in seeds.get("saved", [])}
 
     rows, seen = [], set()

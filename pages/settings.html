@@ -343,13 +343,18 @@ async function saveKeys() {
   const r = await (await fetch('/api/keys', {method: 'POST', body: JSON.stringify(
     {spotify_client_id: $('k_sp').value, lastfm_api_key: $('k_lf').value,
      port: $('k_pt').value})})).json();
-  $('e_sp').hidden = r.spotify;
-  $('e_lf').hidden = r.lastfm;
+  $('e_sp').hidden = r.spotify !== false;
+  $('e_lf').hidden = r.lastfm !== false;
   $('e_pt').hidden = r.port !== false;
-  $('k_sp').classList.toggle('bad', !r.spotify);
-  $('k_lf').classList.toggle('bad', !r.lastfm);
+  $('k_sp').classList.toggle('bad', r.spotify === false);
+  $('k_lf').classList.toggle('bad', r.lastfm === false);
   $('k_pt').classList.toggle('bad', r.port === false);
-  if (!r.ok) { $('msg').textContent = 'not saved, a value is not valid'; return; }
+  if (!r.ok) {
+    $('msg').textContent = r.spotify === null || r.lastfm === null
+      ? 'not saved, could not reach Spotify or Last.fm'
+      : 'not saved, a value is not valid';
+    return;
+  }
   const moved = $('k_pt').value && $('k_pt').value !== loadedPort;
   $('msg').textContent = moved ? 'saved, restart the app to use port ' + $('k_pt').value : 'saved';
 }

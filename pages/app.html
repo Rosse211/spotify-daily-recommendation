@@ -306,11 +306,12 @@ $('go').onclick = async () => {
     $('msg').textContent = 'checking\u2026';
     const r = await (await fetch('/api/keys', {method: 'POST', body: JSON.stringify(
       {spotify_client_id: $('k_sp').value, lastfm_api_key: $('k_lf').value})})).json();
-    $('e_sp').hidden = r.spotify;
-    $('e_lf').hidden = r.lastfm;
-    $('k_sp').classList.toggle('bad', !r.spotify);
-    $('k_lf').classList.toggle('bad', !r.lastfm);
-    $('msg').textContent = '';
+    $('e_sp').hidden = r.spotify !== false;
+    $('e_lf').hidden = r.lastfm !== false;
+    $('k_sp').classList.toggle('bad', r.spotify === false);
+    $('k_lf').classList.toggle('bad', r.lastfm === false);
+    $('msg').textContent = r.spotify === null || r.lastfm === null
+      ? 'could not reach Spotify or Last.fm, check your connection' : '';
     $('go').disabled = false;
     if (r.ok) return boot();
     return;

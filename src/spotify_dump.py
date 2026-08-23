@@ -26,7 +26,7 @@ def check_client_id(client_id):
         except Exception:
             return False
     except Exception:
-        return True
+        return None
 
 
 def save_config(values):
@@ -192,7 +192,7 @@ def flatten(t):
         return None
     return {"id": t["id"], "title": t["name"], "artist": t["artists"][0]["name"],
             "artists": [a["name"] for a in t["artists"]],
-            "popularity": t.get("popularity"), "url": t["external_urls"]["spotify"]}
+            "url": t["external_urls"]["spotify"]}
 
 
 
