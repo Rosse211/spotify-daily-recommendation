@@ -154,6 +154,9 @@ input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:tran
     <label class=f><span>Last.fm API key</span><input id=k_lf autocomplete=off spellcheck=false>
       <b class=err id=e_lf hidden>not valid</b>
     </label>
+    <label class=f><span>Port</span><input id=k_pt autocomplete=off spellcheck=false inputmode=numeric>
+      <b class=err id=e_pt hidden>not valid</b>
+    </label>
   </section>
   <section id=danger>
     <button class=danger id=logout>
@@ -229,8 +232,12 @@ function drawSuggestions() {
     const b = document.createElement('button');
     b.className = 's';
     const i = t.toLowerCase().indexOf(q);
-    b.innerHTML = i < 0 ? '' : `${t.slice(0, i)}<em>${t.slice(i, i + q.length)}</em>${t.slice(i + q.length)}`;
     if (i < 0) b.textContent = t;
+    else {
+      const em = document.createElement('em');
+      em.textContent = t.slice(i, i + q.length);
+      b.append(t.slice(0, i), em, t.slice(i + q.length));
+    }
     b.onclick = () => addGenre(t);
     $('sugg').appendChild(b);
   }
@@ -329,18 +336,26 @@ $('newrow').onclick = () => {
   save();
 };
 
+let loadedPort = '';
+
 async function saveKeys() {
   $('msg').textContent = 'checking...';
   const r = await (await fetch('/api/keys', {method: 'POST', body: JSON.stringify(
-    {spotify_client_id: $('k_sp').value, lastfm_api_key: $('k_lf').value})})).json();
+    {spotify_client_id: $('k_sp').value, lastfm_api_key: $('k_lf').value,
+     port: $('k_pt').value})})).json();
   $('e_sp').hidden = r.spotify;
   $('e_lf').hidden = r.lastfm;
+  $('e_pt').hidden = r.port !== false;
   $('k_sp').classList.toggle('bad', !r.spotify);
   $('k_lf').classList.toggle('bad', !r.lastfm);
-  $('msg').textContent = r.ok ? 'saved' : 'not saved, a key is not valid';
+  $('k_pt').classList.toggle('bad', r.port === false);
+  if (!r.ok) { $('msg').textContent = 'not saved, a value is not valid'; return; }
+  const moved = $('k_pt').value && $('k_pt').value !== loadedPort;
+  $('msg').textContent = moved ? 'saved, restart the app to use port ' + $('k_pt').value : 'saved';
 }
 $('k_sp').onchange = saveKeys;
 $('k_lf').onchange = saveKeys;
+$('k_pt').onchange = saveKeys;
 
 async function danger(button, endpoint, question, working) {
   if (!confirm(question)) return;
@@ -365,6 +380,7 @@ $('reload').onclick = () => danger($('reload'), 'reload-library',
   const k = await (await fetch('/api/keys')).json();
   $('k_sp').value = k.spotify_client_id;
   $('k_lf').value = k.lastfm_api_key;
+  $('k_pt').value = loadedPort = k.port;
   d = await (await fetch('/api/settings')).json();
   d.extra = d.extra || [];
   suggestions = await (await fetch('/api/tags')).json();

@@ -657,7 +657,8 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/keys":
                 return self._send(json.dumps(
                     {"spotify_client_id": sp.config("spotify_client_id") or "",
-                     "lastfm_api_key": sp.config("lastfm_api_key") or ""}))
+                     "lastfm_api_key": sp.config("lastfm_api_key") or "",
+                     "port": str(PORT)}))
             if self.path.startswith("/api/genres"):
                 q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                 saved = load(PREFS, {})
@@ -713,9 +714,15 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or "{}")
             if self.path == "/api/keys":
                 cid, lfm = body.get("spotify_client_id", ""), body.get("lastfm_api_key", "")
+                port = str(body.get("port", "")).strip()
                 checked = check_keys(cid, lfm)
+                if port:
+                    checked["port"] = valid_port(port)
                 if all(checked.values()):
-                    sp.save_config({"spotify_client_id": cid, "lastfm_api_key": lfm})
+                    values = {"spotify_client_id": cid, "lastfm_api_key": lfm}
+                    if port:
+                        values["port"] = port
+                    sp.save_config(values)
                 return self._send(json.dumps(dict(checked, ok=all(checked.values()))))
             if self.path == "/api/prefs":
                 body["obscurity"] = max(0.0, min(3.0, float(body.get("obscurity", 2.0))))
@@ -743,27 +750,42 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-PORT = 8080
+PORT = int(sp.config("port") or 8080)
 URL = f"http://127.0.0.1:{PORT}"
+CALLBACK_PORT = urllib.parse.urlparse(sp.REDIRECT).port
 
 
-def already_running():
+def valid_port(value):
+    return value.isdigit() and 1024 <= int(value) <= 65535 and int(value) != CALLBACK_PORT
+
+
+def port_state():
     probe = socket.socket()
     probe.settimeout(0.4)
     try:
-        return probe.connect_ex(("127.0.0.1", PORT)) == 0
+        if probe.connect_ex(("127.0.0.1", PORT)) != 0:
+            return "free"
     finally:
         probe.close()
+    try:
+        with urllib.request.urlopen(f"{URL}/api/status", timeout=3) as r:
+            return "ours" if "configured" in json.loads(r.read()) else "taken"
+    except Exception:
+        return "taken"
 
 
 sp.OPEN_BROWSER = False
 
 
 def main():
-    if already_running():
+    state = port_state()
+    if state == "ours":
         print(f"Already running, opening {URL}")
         webbrowser.open(URL)
         return
+    if state == "taken":
+        sys.exit(f"Port {PORT} is busy with something else.\n"
+                 f"Set a different \"port\" in {sp.CONFIG} and start again.")
     print(URL)
     webbrowser.open(URL)
     try:

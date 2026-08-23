@@ -66,6 +66,10 @@ CROSS = ('<svg viewBox="0 0 24 24"><path d="M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 1
          ' 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z"/></svg>')
 
 
+def app_url():
+    return f"http://127.0.0.1:{config('port') or 8080}"
+
+
 def _result_page(title, note, ok=True):
     template = ROOT / "pages" / "logged_in.html"
     if not template.exists():
@@ -75,8 +79,9 @@ def _result_page(title, note, ok=True):
             .replace("{{note}}", note)
             .replace("{{icon}}", TICK if ok else CROSS)
             .replace("{{tint}}", "#1db954" if ok else "#e0455c")
+            .replace("{{app}}", app_url())
             .replace("{{fallback}}",
-                     "setTimeout(() => location.href = 'http://127.0.0.1:8080', 1800);"
+                     f"setTimeout(() => location.href = '{app_url()}', 1800);"
                      if ok else ""))
 
 
