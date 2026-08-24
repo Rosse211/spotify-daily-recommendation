@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-import json, math, random, re, socket, sys, threading, time, traceback, urllib.parse, urllib.request, webbrowser
+import json, math, os, random, re, socket, sys, threading, time, traceback, urllib.parse, urllib.request, webbrowser
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import spotify_dump as sp
+
+sys.path.insert(0, str(sp.ROOT))
+try:
+    import update as up
+except ImportError:
+    up = None
 
 DATA = sp.DATA
 PAGES = sp.ROOT / "pages"
@@ -12,11 +18,35 @@ TODAY = DATA / "today.json"
 FEEDBACK = DATA / "feedback.json"
 GENRES = DATA / "genres.json"
 ARTISTS = DATA / "artists.json"
+TRACKS = DATA / "tracks.json"
 PREFS = DATA / "prefs.json"
 TOP_GENRES = 5
+GENRES_VERSION = 2
 DISLIKES_TO_BAN = 3
 MAX_REROLLS = 3
 UNKNOWN = "unknown"
+
+SCORE_FLOOR = 2.0
+ARTIST_SPAN = 4.8
+TRACK_SPAN = 5.5
+ARTIST_WEIGHT = 0.35
+DEEZER_FAN_SCALE = 5
+SCORE_WINDOW = 0.8
+WINDOW_STEP = 0.6
+WINDOW_LIMIT = 1.3
+ALBUMS_SAMPLED = 3
+DEEP_CUT_NEED = 0.7
+TRACKS_SCORED = 25
+TRACK_CACHE_DAYS = 7
+ULTRA_LISTENERS = 5000
+ULTRA_PLAYS = 10000
+ULTRA_TAG_DEPTH = 1000
+ULTRA_TAIL = 80
+ULTRA_POOL = 24
+ULTRA_TAGS = 4
+CHART_TARGET = 8.0
+CHART_ARTISTS = 40
+LANGUAGE_SHARE = 0.05
 
 
 ACCOUNT_FILES = [sp.TOKENS, DATA / "seeds.json", DATA / "known.json",
@@ -40,6 +70,8 @@ def dz(path, **params):
         try:
             r = json.load(urllib.request.urlopen(req, timeout=15))
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
+            if isinstance(e, urllib.error.HTTPError) and e.code < 500:
+                raise
             if attempt == 4:
                 raise RuntimeError(f"Deezer unreachable on {path}: {e}") from e
             time.sleep(2 ** attempt)
@@ -51,16 +83,14 @@ def dz(path, **params):
 
 
 LANGUAGES = {
-    "italian": "italian", "italiano": "italian", "italy": "italian",
+    "italian": "italian", "italiano": "italian",
     "french": "french", "francais": "french", "francophone": "french",
     "spanish": "spanish", "espanol": "spanish", "reggaeton": "spanish",
-    "latin": "spanish", "latino": "spanish",
     "german": "german", "deutsch": "german", "deutschrap": "german",
-    "portuguese": "portuguese", "brazilian": "portuguese", "brasil": "portuguese",
+    "portuguese": "portuguese",
     "japanese": "japanese", "j-pop": "japanese", "j-rock": "japanese",
     "korean": "korean", "k-pop": "korean",
-    "english": "english", "british": "english", "american": "english",
-    "uk": "english", "usa": "english", "us": "english", "australian": "english",
+    "english": "english",
 }
 NO_LYRICS = {"instrumental", "instrumentals", "instrumental hip-hop",
              "ambient", "soundtrack", "score", "lo-fi beats"}
@@ -128,23 +158,101 @@ def is_noise(name, tags=()):
     return bool(FOCUS_NOISE.search(name)) or bool(NOISE_TAGS & set(tags))
 
 
+def stats_of(name, key):
+    url = LASTFM + urllib.parse.urlencode({"method": "artist.getInfo", "artist": name,
+                                           "api_key": key, "format": "json", "autocorrect": 1})
+    time.sleep(max(0, 0.25 - (time.monotonic() - _lfm_last[0])))
+    _lfm_last[0] = time.monotonic()
+    d = json.load(urllib.request.urlopen(url, timeout=20)).get("artist", {}).get("stats", {})
+    return int(d.get("listeners") or 0)
+
+
 def artists_info(names):
     cache = load(ARTISTS, {})
     key = lastfm_key()
-    todo = [n for n in dict.fromkeys(names) if n and n not in cache]
+    todo = [n for n in dict.fromkeys(names)
+            if n and (n not in cache or "listeners" not in cache[n])]
     if todo and key and _lfm_fail[0] < 5:
         for n in todo:
+            entry = cache.get(n) or {}
             try:
-                tags = tags_of(n, key)
-                cache[n] = {"lang": language_from_tags(tags) or UNKNOWN,
-                            "noise": is_noise(n, tags), "tags": tags}
+                if "tags" not in entry:
+                    entry = {"tags": tags_of(n, key)}
+                entry["listeners"] = stats_of(n, key)
+                cache[n] = entry
                 _lfm_fail[0] = 0
             except Exception as e:
-                warn(f"Last.fm tags for {n!r}", e)
+                warn(f"Last.fm artist {n!r}", e)
                 _lfm_fail[0] += 1
         ARTISTS.write_text(json.dumps(cache, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8")
-    blank = {"lang": UNKNOWN, "noise": False, "tags": []}
-    return {n: {**blank, **cache.get(n, {"noise": is_noise(n)})} for n in names}
+    out = {}
+    for n in names:
+        entry = {"tags": [], "listeners": 0, **cache.get(n, {})}
+        entry["lang"] = language_from_tags(entry["tags"]) or UNKNOWN
+        entry["noise"] = is_noise(n, entry["tags"])
+        out[n] = entry
+    return out
+
+
+_plays = None
+
+
+def plays_cache():
+    global _plays
+    if _plays is None:
+        _plays = load(TRACKS, {})
+    return _plays
+
+
+def track_plays(artist, title):
+    cache = plays_cache()
+    slot = f"{artist}\t{title}".lower()
+    hit = cache.get(slot)
+    if hit and time.time() - hit[1] < TRACK_CACHE_DAYS * 86400:
+        return hit[0]
+    key = lastfm_key()
+    if not key:
+        return None
+    url = LASTFM + urllib.parse.urlencode({"method": "track.getInfo", "artist": artist,
+                                           "track": title, "api_key": key,
+                                           "format": "json", "autocorrect": 1})
+    try:
+        time.sleep(max(0, 0.25 - (time.monotonic() - _lfm_last[0])))
+        _lfm_last[0] = time.monotonic()
+        d = json.load(urllib.request.urlopen(url, timeout=20))
+    except Exception as e:
+        warn(f"Last.fm plays for {artist!r} - {title!r}", e)
+        return None
+    plays = int(d["track"].get("playcount") or 0) if "track" in d else 0
+    cache[slot] = [plays, time.time()]
+    TRACKS.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
+    return plays
+
+
+def normalise(value, span):
+    if not value or value <= 0:
+        return 0.0
+    return max(0.0, min(1.0, (math.log10(value) - SCORE_FLOOR) / span))
+
+
+def score(listeners, plays):
+    fame = normalise(listeners, ARTIST_SPAN)
+    if plays is None:
+        return 10 * fame
+    return 10 * (ARTIST_WEIGHT * fame + (1 - ARTIST_WEIGHT) * normalise(plays, TRACK_SPAN))
+
+
+def target_score(obscurity):
+    return 10 - 8 * obscurity / 3
+
+
+def reachable(listeners, target, window):
+    low = 10 * ARTIST_WEIGHT * normalise(listeners, ARTIST_SPAN)
+    return low - window <= target <= low + 10 * (1 - ARTIST_WEIGHT) + window
+
+
+def artist_level(info, deezer_fan=0):
+    return max(info.get("listeners", 0) or 0, (deezer_fan or 0) * DEEZER_FAN_SCALE)
 
 
 def lang_of(name):
@@ -152,7 +260,9 @@ def lang_of(name):
 
 
 DEEZER = DATA / "deezer.json"
+SEARCHED = DATA / "deezer_artists.json"
 _genre_of = None
+_searched = None
 _found = {}
 
 
@@ -190,11 +300,20 @@ def artist_genre(deezer_id):
     return cache[deezer_id]
 
 
+def search_cache():
+    global _searched
+    if _searched is None:
+        _searched = load(SEARCHED, {})
+    return _searched
+
+
 def find_artist(name):
-    if name not in _found:
+    cache = search_cache()
+    if name not in cache:
         hit = dz("search/artist", q=name, limit=1).get("data")
-        _found[name] = hit[0]["id"] if hit else None
-    return _found[name]
+        cache[name] = hit[0]["id"] if hit else None
+        SEARCHED.write_text(json.dumps(cache, ensure_ascii=False, indent=0), encoding="utf-8")
+    return cache[name]
 
 
 def related_of(deezer_id):
@@ -219,7 +338,6 @@ def all_tracks(seeds):
 
 
 def is_active(track_key, in_source, overrides):
-    """A track counts unless you switched it off, or on, by hand."""
     return overrides.get(track_key, in_source)
 
 
@@ -266,13 +384,38 @@ def compute_genres(source="all", overrides=None):
     data = {"top": top, "counts": dict(sorted(counts.items(), key=lambda kv: -kv[1]))}
     cached = load(GENRES, {})
     cached[source] = data
+    cached["version"] = GENRES_VERSION
     GENRES.write_text(json.dumps(cached, ensure_ascii=False, indent=1), encoding="utf-8")
     save_genre_cache()
     return data
 
 
 def genres_for(source, overrides=None):
-    return load(GENRES, {}).get(source) or compute_genres(source, overrides)
+    cached = load(GENRES, {})
+    if cached.get("version") == GENRES_VERSION and cached.get(source):
+        return cached[source]
+    return compute_genres(source, overrides)
+
+
+def language_of_bucket(bucket):
+    return bucket.split(" \u00b7 ")[1] if " \u00b7 " in bucket else UNKNOWN
+
+
+def spoken_languages(genres, prefs):
+    heard = {}
+    for bucket, n in genres.get("counts", {}).items():
+        if bucket in prefs["removed"] or prefs["states"].get(bucket) == "out":
+            continue
+        lang = language_of_bucket(bucket)
+        heard[lang] = heard.get(lang, 0) + n
+    total = sum(heard.values())
+    if not total:
+        return None
+    return {UNKNOWN} | {lang for lang, n in heard.items() if n / total >= LANGUAGE_SHARE}
+
+
+def language_allowed(lang, state, spoken):
+    return spoken is None or lang in spoken or state == "in"
 
 
 def seed_order(seeds, prefs, rnd):
@@ -308,36 +451,137 @@ def bucket_allowed(bucket, state_key, strict, prefs, detected):
     return state == "in" or hand_picked or bucket in detected or prefs["new"]
 
 
-def by_obscurity(items, value_of, rnd, obscurity=2.0):
-    exponent = obscurity - 1
-    ordered = sorted(items, key=value_of, reverse=True)
-    weights = {id(x): (i + 1) ** exponent for i, x in enumerate(ordered)}
-    return sorted(ordered, key=lambda x: rnd.random() ** (1 / weights[id(x)]), reverse=True)
+def album_tracks(deezer_id, rnd):
+    try:
+        albums = [a for a in dz(f"artist/{deezer_id}/albums", limit=50).get("data", [])
+                  if a.get("record_type") == "album"]
+    except Exception as e:
+        warn(f"Deezer albums for {deezer_id}", e)
+        return []
+    rnd.shuffle(albums)
+    out = []
+    for a in albums[:ALBUMS_SAMPLED]:
+        try:
+            for t in dz(f"album/{a['id']}/tracks", limit=100).get("data", []):
+                t["album"] = a
+                out.append(t)
+        except Exception as e:
+            warn(f"Deezer album {a['id']}", e)
+    return out
 
 
-def deep_cut_order(tracks, rnd, obscurity):
-    return by_obscurity(tracks, lambda t: t.get("rank", 0), rnd, obscurity)
+def track_need(target, listeners):
+    fame = normalise(listeners, ARTIST_SPAN)
+    return (target / 10 - ARTIST_WEIGHT * fame) / (1 - ARTIST_WEIGHT)
 
 
-def playable(cand, known_t, seen, rnd, obscurity):
-    
-    tracks = deep_cut_order(dz(f"artist/{cand['id']}/top", limit=10).get("data", []),
-                            rnd, obscurity)
-    for t in tracks:
-        k = sp.key(t["artist"]["name"], t["title"])
-        if k in known_t or k in seen or not t.get("preview"):
-            continue
-        if FOCUS_NOISE.search(t["title"]):
-            continue
-        return k, t
+def search_order(tracks, need):
+    return sorted(tracks, key=lambda t: t.get("rank", 0), reverse=need >= 0.5)
+
+
+def pickable(track, cand, known_t, seen):
+    if sp.norm(track["artist"]["name"]) != sp.norm(cand["name"]):
+        return None
+    k = sp.key(track["artist"]["name"], track["title"])
+    if k in known_t or k in seen or not track.get("preview"):
+        return None
+    if FOCUS_NOISE.search(track["title"]):
+        return None
+    return k
+
+
+def playable(cand, known_t, seen, rnd, listeners, target, window, ultra):
+    need = track_need(target, listeners)
+    passes = (False,) if need > DEEP_CUT_NEED and not ultra else (False, True)
+    for deeper in passes:
+        tracks = (album_tracks(cand["id"], rnd) if deeper
+                  else dz(f"artist/{cand['id']}/top", limit=10).get("data", []))
+        for t in search_order(tracks, need)[:TRACKS_SCORED]:
+            k = pickable(t, cand, known_t, seen)
+            if not k:
+                continue
+            plays = track_plays(t["artist"]["name"], t["title"])
+            if plays is None:
+                continue
+            if ultra:
+                if listeners < ULTRA_LISTENERS and (plays or 0) < ULTRA_PLAYS:
+                    return k, t
+            elif abs(score(listeners, plays) - target) <= window:
+                return k, t
     return None, None
 
 
-def related_to(seed, rnd, obscurity):
+def taste_tags(seeds, prefs):
+    heard = artists_info([a["name"] for a in
+                          taste_artists(seeds, prefs["source"], prefs["overrides"])])
+    counts = {}
+    for entry in heard.values():
+        for t in entry.get("tags", [])[:4]:
+            if t not in NON_GENRE and t not in NOISE_TAGS:
+                counts[t] = counts.get(t, 0) + 1
+    return sorted(counts, key=counts.get, reverse=True)[:ULTRA_TAGS]
+
+
+def obscure_pool(seeds, prefs, rnd, want=ULTRA_POOL):
+    names = []
+    for tag in taste_tags(seeds, prefs):
+        names += tag_artists(tag, limit=ULTRA_TAG_DEPTH)[-want * 4:]
+    names = list(dict.fromkeys(names))
+    rnd.shuffle(names)
+    names = names[:want]
+    heard = artists_info(names)
+    pool = []
+    for n in names:
+        level = artist_level(heard[n])
+        if level >= ULTRA_LISTENERS:
+            continue
+        found = find_artist(n)
+        if found:
+            pool.append({"name": n, "id": found, "level": level})
+    return pool
+
+
+def chart_pool(rnd):
+    try:
+        pool = dz("chart/0/artists", limit=100).get("data", [])
+    except Exception as e:
+        warn("Deezer chart", e)
+        return []
+    rnd.shuffle(pool)
+    pool = pool[:CHART_ARTISTS]
+    infos = artists_info([a["name"] for a in pool])
+    for a in pool:
+        a["level"] = artist_level(infos[a["name"]])
+    return pool
+
+
+def with_feats(track):
+    try:
+        guests = dz(f"track/{track['id']}").get("contributors", [])
+    except Exception as e:
+        warn(f"Deezer contributors for {track.get('id')}", e)
+        return track["title"]
+    title, main = track["title"], sp.norm(track["artist"]["name"])
+    others = [c["name"] for c in guests
+              if sp.norm(c["name"]) != main and c["name"].lower() not in title.lower()]
+    return f"{title} (feat. {', '.join(others)})" if others else title
+
+
+def related_to(seed, target, window, rnd, ultra):
     found = find_artist(seed["name"])
     if not found:
         return []
-    return by_obscurity(related_of(found), lambda a: a.get("nb_fan", 0), rnd, obscurity)[:6]
+    pool = related_of(found)
+    infos = artists_info([a["name"] for a in pool])
+    keep = []
+    for a in pool:
+        a["level"] = artist_level(infos[a["name"]], a.get("nb_fan", 0))
+        wanted = (a["level"] < ULTRA_LISTENERS if ultra
+                  else reachable(a["level"], target, window))
+        if wanted:
+            keep.append(a)
+    rnd.shuffle(keep)
+    return keep[:6]
 
 
 def read_prefs():
@@ -348,18 +592,20 @@ def read_prefs():
             "states": stored.get("states", {b: "in" for b in genres["top"]}),
             "removed": set(stored.get("removed", [])),
             "extra": [g.lower() for g in stored.get("extra", [])],
-            "obscurity": float(stored.get("obscurity",2.0)),
+            "obscurity": float(stored.get("obscurity", 2.0)),
+            "ultra": bool(stored.get("ultra", False)),
             "new": stored.get("new", False)}, genres
 
 
 def pick(avoid_bucket=None):
     seeds = json.loads((DATA / "seeds.json").read_text(encoding="utf-8"))
-    known = json.loads((DATA / "known.json").read_text(encoding="utf-8"))
-    known_a, known_t = set(known["artists"]), set(known["tracks"])
+    known = load(DATA / "known.json", {})
+    known_a, known_t = set(known.get("artists", [])), set(known.get("tracks", []))
     seen = set(load(HISTORY, []))
     seen_artists = {k.split(" — ")[0] for k in seen}
     prefs, genres = read_prefs()
     detected = set(genres["counts"])
+    spoken = spoken_languages(genres, prefs)
     dislikes = load(FEEDBACK, {}).get("dislikes", {})
     banned = {a for a, n in dislikes.items() if n >= DISLIKES_TO_BAN}
     off_limits = known_a | banned | seen_artists
@@ -367,30 +613,67 @@ def pick(avoid_bucket=None):
     rnd = random.Random(date.today().isoformat())
     order = seed_order(seeds, prefs, rnd)
     seed_noise = artists_info([a["name"] for a in order])
+    target = target_score(prefs["obscurity"])
+    ultra = prefs["ultra"]
+    charts = {"name": "Deezer charts"}
+    deep = {"name": "Last.fm tail"}
+    boost = chart_pool(rnd) if target > CHART_TARGET and not ultra else []
+    tail = obscure_pool(seeds, prefs, rnd) if ultra else []
 
-    for strict, seed in [(s, a) for s in (True, False) for a in order]:
-        if seed_noise[seed["name"]]["noise"]:
+    def attempt(window):
+        rounds = [(s, deep) for s in (True, False)] if tail else []
+        rounds += [(True, charts)] if boost else []
+        rounds += [(s, a) for s in (True, False) for a in order]
+        for strict, seed in rounds:
+            if seed is deep:
+                related = tail
+            elif seed is charts:
+                related = [a for a in boost if reachable(a["level"], target, window)]
+            elif seed_noise[seed["name"]]["noise"]:
+                continue
+            else:
+                related = related_to(seed, target, window, rnd, ultra)
+            infos = artists_info([c["name"] for c in related])
+            for cand in related:
+                info = infos[cand["name"]]
+                if sp.norm(cand["name"]) in off_limits or info["noise"]:
+                    continue
+                bucket, state_key = bucket_for(cand, info, prefs["extra"])
+                if bucket == avoid_bucket:
+                    continue
+                if not language_allowed(info["lang"], prefs["states"].get(state_key), spoken):
+                    continue
+                if not bucket_allowed(bucket, state_key, strict, prefs, detected):
+                    continue
+                key, track = playable(cand, known_t, seen, rnd,
+                                      cand["level"], target, window, ultra)
+                if key:
+                    return key, track, seed, bucket
+        return None
+
+    window, want, got = SCORE_WINDOW, ULTRA_POOL, None
+    while True:
+        got = attempt(window)
+        if got:
+            break
+        if ultra:
+            if want >= ULTRA_POOL * 5:
+                break
+            want += ULTRA_POOL
+            tail = obscure_pool(seeds, prefs, rnd, want)
+            print(f"  ultra: nothing yet, widening the pool to {len(tail)}", file=sys.stderr)
             continue
-        related = related_to(seed, rnd, prefs["obscurity"])
-        infos = artists_info([c["name"] for c in related])
-        for cand in related:
-            info = infos[cand["name"]]
-            if sp.norm(cand["name"]) in off_limits or info["noise"]:
-                continue
-            bucket, state_key = bucket_for(cand, info, prefs["extra"])
-            if bucket == avoid_bucket:
-                continue
-            if not bucket_allowed(bucket, state_key, strict, prefs, detected):
-                continue
-            key, track = playable(cand, known_t, seen, rnd, prefs["obscurity"])
-            if key:
-                save_genre_cache()
-                return {"key": key, "title": track["title"],
-                        "artist": track["artist"]["name"],
-                        "cover": track["album"].get("cover_xl") or track["album"].get("cover_big"),
-                        "preview": track["preview"], "seed": seed["name"], "genre": bucket}
+        if window >= WINDOW_LIMIT:
+            break
+        window = min(WINDOW_LIMIT, window + WINDOW_STEP)
+        print(f"  nothing within reach, widening the window to {window:.1f}", file=sys.stderr)
     save_genre_cache()
-    return None
+    if not got:
+        return None
+    key, track, seed, bucket = got
+    return {"key": key, "title": with_feats(track), "artist": track["artist"]["name"],
+            "cover": track["album"].get("cover_xl") or track["album"].get("cover_big"),
+            "preview": track["preview"], "seed": seed["name"], "genre": bucket}
 
 
 def save_pick(card, rerolls=0):
@@ -450,7 +733,7 @@ def set_vote(card, target):
 def vote(action):
     cached = load(TODAY, None)
     if not cached:
-        return {"error": "Nothing to vote on."}
+        return today() if action == "reroll" else {"error": "Nothing to vote on."}
     card = cached["card"]
 
     if action in ("like", "dislike"):
@@ -479,9 +762,9 @@ def lastfm_genres():
     cached = load(ARTISTS, {})
     artist_names = {n.lower() for n in cached}
     seen = {}
-    for info in cached.values():
+    for name, info in cached.items():
         for t in info.get("tags", []):
-            seen.setdefault(t.lower(), set()).add(id(info))
+            seen.setdefault(t.lower(), set()).add(name)
     names = {pretty_genre(t) for t, on in seen.items() if len(on) >= 2}
 
     key = lastfm_key()
@@ -503,17 +786,17 @@ _tag_artists = {}
 
 
 def tag_artists(tag, limit=30):
-    if tag not in _tag_artists:
+    if (tag, limit) not in _tag_artists:
         key = lastfm_key()
         url = LASTFM + urllib.parse.urlencode({"method": "tag.getTopArtists", "tag": tag,
                                                "api_key": key, "format": "json", "limit": limit})
         try:
             d = json.load(urllib.request.urlopen(url, timeout=20))
-            _tag_artists[tag] = [a["name"] for a in d.get("topartists", {}).get("artist", [])]
+            _tag_artists[tag, limit] = [a["name"] for a in d.get("topartists", {}).get("artist", [])]
         except Exception as e:
             warn(f"Last.fm artists for tag {tag!r}", e)
-            _tag_artists[tag] = []
-    return _tag_artists[tag]
+            _tag_artists[tag, limit] = []
+    return _tag_artists[tag, limit]
 
 
 def check_lastfm_key(key):
@@ -525,7 +808,7 @@ def check_lastfm_key(key):
         return False
     except Exception as e:
         warn("Last.fm key check", e)
-        return True
+        return None
 
 
 def check_keys(spotify_id, lastfm):
@@ -557,8 +840,7 @@ def settings_data():
     removed = set(prefs.get("removed", []))
     states = prefs.get("states", {b: "in" for b in genres["top"]})
     seeds = json.loads((DATA / "seeds.json").read_text(encoding="utf-8"))
-    known = json.loads((DATA / "known.json").read_text(encoding="utf-8"))
-    sources = known.get("sources", {})
+    sources = load(DATA / "known.json", {}).get("sources", {})
     saved = {sp.key(t["artist"], t["title"]) for t in seeds.get("saved", [])}
 
     rows, seen = [], set()
@@ -577,7 +859,45 @@ def settings_data():
                 if b not in removed and b not in extra]
     return {"source": source, "new": prefs.get("new", False), "extra": extra,
             "obscurity": float(prefs.get("obscurity", 2.0)),
+            "ultra": bool(prefs.get("ultra", False)),
             "buckets": buckets, "tracks": rows}
+
+
+UPDATE = {"state": "idle", "percent": 0, "available": None, "tag": None}
+_release = [None]
+
+
+def update_status():
+    if UPDATE["available"] is None:
+        UPDATE["available"] = False
+        if up and not up.cloned():
+            try:
+                _release[0] = up.latest()
+                tag = _release[0].get("tag_name")
+                UPDATE["tag"] = tag
+                UPDATE["available"] = bool(tag) and tag != up.installed()
+            except Exception as e:
+                warn("update check", e)
+    return UPDATE
+
+
+def restart():
+    os.execv(sys.executable, [sys.executable, str(sp.HERE / "app.py"), "--restarted"])
+
+
+def update_run():
+    def go():
+        try:
+            up.apply(_release[0], lambda got, total: UPDATE.update(
+                percent=int(100 * got / total) if total else 0))
+            UPDATE.update(state="done", percent=100, available=False)
+            threading.Timer(1.0, restart).start()
+        except Exception as e:
+            warn("update", e)
+            UPDATE.update(state="failed", percent=0)
+
+    UPDATE.update(state="downloading", percent=0)
+    threading.Thread(target=go, daemon=True).start()
 
 
 WRITER = threading.Lock()
@@ -614,25 +934,6 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(page("settings.html"), "text/html")
             if self.path == "/api/settings":
                 return self._send(json.dumps(settings_data(), ensure_ascii=False))
-            if self.path == "/api/logout":
-                with WRITER:
-                    for f in ACCOUNT_FILES:
-                        f.unlink(missing_ok=True)
-                return self._send(json.dumps({"ok": True}))
-            if self.path == "/api/reset-feedback":
-                with WRITER:
-                    FEEDBACK.unlink(missing_ok=True)
-                    cached = load(TODAY, None)
-                    if cached:
-                        cached["card"]["liked"] = cached["card"]["disliked"] = False
-                        TODAY.write_text(json.dumps(cached, ensure_ascii=False), encoding="utf-8")
-                return self._send(json.dumps({"ok": True}))
-            if self.path == "/api/reload-library":
-                with WRITER:
-                    sp.main()
-                    GENRES.unlink(missing_ok=True)
-                    TODAY.unlink(missing_ok=True)
-                return self._send(json.dumps({"ok": True}))
             if self.path == "/api/tags":
                 return self._send(json.dumps(lastfm_genres(), ensure_ascii=False))
             if self.path.startswith("/api/addtag"):
@@ -646,7 +947,8 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/keys":
                 return self._send(json.dumps(
                     {"spotify_client_id": sp.config("spotify_client_id") or "",
-                     "lastfm_api_key": sp.config("lastfm_api_key") or ""}))
+                     "lastfm_api_key": sp.config("lastfm_api_key") or "",
+                     "port": str(PORT)}))
             if self.path.startswith("/api/genres"):
                 q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                 saved = load(PREFS, {})
@@ -655,6 +957,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(json.dumps(
                         {"source": source, "buckets": [], "states": {},
                          "new": saved.get("new", False),
+                         "ultra": bool(saved.get("ultra", False)),
                          "obscurity": float(saved.get("obscurity", 2.0))}))
                 g = genres_for(source)
                 same = saved.get("source", "all") == source
@@ -664,8 +967,11 @@ class Handler(BaseHTTPRequestHandler):
                     {"buckets": list(g["counts"].items()),
                      "states": {b: states.get(b, "") for b in g["counts"]},
                      "new": saved.get("new", False), "source": source,
+                     "ultra": bool(saved.get("ultra", False)),
                      "obscurity": float(saved.get("obscurity", 2.0))},
                     ensure_ascii=False))
+            if self.path == "/api/update":
+                return self._send(json.dumps(update_status()))
             if self.path == "/api/pending":
                 return self._send(json.dumps({"url": sp.PENDING["url"]}))
             if self.path == "/api/login":
@@ -700,11 +1006,40 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_error(403)
         try:
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or "{}")
+            if self.path == "/api/logout":
+                with WRITER:
+                    for f in ACCOUNT_FILES:
+                        f.unlink(missing_ok=True)
+                return self._send(json.dumps({"ok": True}))
+            if self.path == "/api/reset-feedback":
+                with WRITER:
+                    FEEDBACK.unlink(missing_ok=True)
+                    cached = load(TODAY, None)
+                    if cached:
+                        cached["card"]["liked"] = cached["card"]["disliked"] = False
+                        TODAY.write_text(json.dumps(cached, ensure_ascii=False), encoding="utf-8")
+                return self._send(json.dumps({"ok": True}))
+            if self.path == "/api/reload-library":
+                with WRITER:
+                    sp.main()
+                    GENRES.unlink(missing_ok=True)
+                    TODAY.unlink(missing_ok=True)
+                return self._send(json.dumps({"ok": True}))
+            if self.path == "/api/update":
+                if _release[0] and UPDATE["state"] != "downloading":
+                    update_run()
+                return self._send(json.dumps(UPDATE))
             if self.path == "/api/keys":
                 cid, lfm = body.get("spotify_client_id", ""), body.get("lastfm_api_key", "")
+                port = str(body.get("port", "")).strip()
                 checked = check_keys(cid, lfm)
+                if port:
+                    checked["port"] = valid_port(port)
                 if all(checked.values()):
-                    sp.save_config({"spotify_client_id": cid, "lastfm_api_key": lfm})
+                    values = {"spotify_client_id": cid, "lastfm_api_key": lfm}
+                    if port:
+                        values["port"] = port
+                    sp.save_config(values)
                 return self._send(json.dumps(dict(checked, ok=all(checked.values()))))
             if self.path == "/api/prefs":
                 body["obscurity"] = max(0.0, min(3.0, float(body.get("obscurity", 2.0))))
@@ -720,6 +1055,7 @@ class Handler(BaseHTTPRequestHandler):
                     prefs["new"] = body.get("new", False)
                     prefs["obscurity"] = max(0.0, min(3.0, float(body.get("obscurity",
                                                                           2.0))))
+                    prefs["ultra"] = bool(body.get("ultra", False))
                     PREFS.write_text(json.dumps(prefs, ensure_ascii=False, indent=1), encoding="utf-8")
                     TODAY.unlink(missing_ok=True)
                 return self._send(json.dumps({"ok": True}))
@@ -732,29 +1068,45 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-PORT = 8080
+PORT = int(sp.config("port") or 8080)
 URL = f"http://127.0.0.1:{PORT}"
+CALLBACK_PORT = urllib.parse.urlparse(sp.REDIRECT).port
 
 
-def already_running():
+def valid_port(value):
+    return value.isdigit() and 1024 <= int(value) <= 65535 and int(value) != CALLBACK_PORT
+
+
+def port_state():
     probe = socket.socket()
     probe.settimeout(0.4)
     try:
-        return probe.connect_ex(("127.0.0.1", PORT)) == 0
+        if probe.connect_ex(("127.0.0.1", PORT)) != 0:
+            return "free"
     finally:
         probe.close()
+    try:
+        with urllib.request.urlopen(f"{URL}/api/status", timeout=3) as r:
+            return "ours" if "configured" in json.loads(r.read()) else "taken"
+    except Exception:
+        return "taken"
 
 
 sp.OPEN_BROWSER = False
 
 
 def main():
-    if already_running():
+    state = port_state()
+    if state == "ours":
         print(f"Already running, opening {URL}")
         webbrowser.open(URL)
         return
+    if state == "taken":
+        sys.exit(f"Port {PORT} is busy with something else.\n"
+                 f"Set a different \"port\" in {sp.CONFIG} and start again.")
     print(URL)
-    webbrowser.open(URL)
+    if "--restarted" not in sys.argv:
+        webbrowser.open(URL)
     try:
         ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
     except KeyboardInterrupt:

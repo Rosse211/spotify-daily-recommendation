@@ -45,16 +45,17 @@ h2{font-size:22px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px}
 .g:hover{background:#ffffff14}
 .g.in{border-left-color:var(--accent);background:#1db9541f}
 .g.out{border-left-color:var(--no);background:#e0455c14;opacity:.5}
-#newrow{display:flex;align-items:center;justify-content:space-between;gap:11px;padding:13px 14px;
+#newrow,#ultrarow0{display:flex;align-items:center;justify-content:space-between;gap:11px;padding:13px 14px;
         border-radius:11px;background:#ffffff0a;cursor:pointer;text-align:left;
         margin:16px 0 20px;transition:background .18s}
-#newrow:hover{background:#ffffff14}
-#newbox{width:19px;height:19px;border-radius:6px;border:1.5px solid #ffffff3d;flex:none;
+#newrow:hover,#ultrarow0:hover{background:#ffffff14}
+#ultrarow0{margin-top:26px}
+#newbox,#ultrabox0{width:19px;height:19px;border-radius:6px;border:1.5px solid #ffffff3d;flex:none;
         display:grid;place-items:center;color:#000;transition:.18s}
-#newrow.on #newbox{background:var(--accent);border-color:var(--accent)}
-#newbox svg{width:12px;height:12px;fill:currentColor;opacity:0}
-#newrow.on #newbox svg{opacity:1}
-#newrow small{display:block;color:var(--dim);font-size:12px}
+#newrow.on #newbox,#ultrarow0.on #ultrabox0{background:var(--accent);border-color:var(--accent)}
+#newbox svg,#ultrabox0 svg{width:12px;height:12px;fill:currentColor;opacity:0}
+#newrow.on #newbox svg,#ultrarow0.on #ultrabox0 svg{opacity:1}
+#newrow small,#ultrarow0 small{display:block;color:var(--dim);font-size:12px}
 .obsblock{text-align:left;padding:13px 14px;border-radius:11px;background:#ffffff0a;
           margin-bottom:20px}
 .obshead{display:flex;align-items:center;justify-content:space-between;font-weight:500;
@@ -72,6 +73,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:17px;heigh
 input[type=range]::-moz-range-thumb{width:17px;height:17px;border:0;border-radius:50%;
                   background:var(--fg);cursor:pointer;box-shadow:0 0 0 4px #9d6bff33}
 input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:transparent}
+#notice{font-size:13.5px;color:var(--dim);margin:0 0 24px}
+#notice a{color:var(--purple);text-decoration:underline;cursor:pointer}
+#lbar{height:4px;border-radius:2px;background:#ffffff1f;overflow:hidden;margin:0 0 16px}
+#lfill{height:100%;width:0;background:var(--purple);border-radius:2px;transition:width .25s}
+#loading p{color:var(--dim);font-size:13.5px;margin:0}
 #card{opacity:0;transform:translateY(8px);transition:opacity .5s,transform .5s}
 #card.in{opacity:1;transform:none}
 #cover{width:352px;height:352px;border-radius:16px;object-fit:cover;background:#17171a;display:block;
@@ -93,6 +99,16 @@ h1{font-size:21px;font-weight:600;letter-spacing:-.01em;margin:22px 0 3px}
 #like.on{background:var(--accent);color:#000}
 #dislike.on{background:var(--no);color:#000}
 #why{color:#5c5c64;font-size:12.5px;margin:20px 0 0}
+.obsblock.off{pointer-events:none}
+.obsblock.off .val{color:var(--dim);background:#ffffff12}
+.obsblock.off .obshint{opacity:.5}
+.obsblock.off input[type=range]{background:#ffffff1f}
+.obsblock.off input[type=range]::-webkit-slider-thumb{background:#ffffff47;box-shadow:0 0 0 4px #ffffff12}
+.obsblock.off input[type=range]::-moz-range-thumb{background:#ffffff47;box-shadow:0 0 0 4px #ffffff12}
+#vol{position:relative;display:flex;align-items:center}
+#volrange{position:absolute;left:calc(100% + 10px);top:50%;transform:translateY(-50%);
+          width:0;opacity:0;pointer-events:none;transition:width .22s,opacity .22s}
+#vol.open #volrange{width:104px;opacity:1;pointer-events:auto}
 #msg{color:var(--dim);font-size:14px;min-height:22px;margin:14px 0 0}
 #back{display:block;margin:12px auto 0;padding:6px 12px;color:var(--dim);font-size:13px;
       transition:color .15s}
@@ -103,6 +119,11 @@ h1{font-size:21px;font-weight:600;letter-spacing:-.01em;margin:22px 0 3px}
   <svg viewBox="0 0 24 24"><path d="M19.4 13a7.8 7.8 0 0 0 0-2l2-1.6-2-3.4-2.5 1a7.6 7.6 0 0 0-1.7-1L14.8 3h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.4L6.6 11a7.8 7.8 0 0 0 0 2l-2 1.6 2 3.4 2.5-1c.5.4 1.1.8 1.7 1l.4 2.6h4l.4-2.6c.6-.2 1.2-.6 1.7-1l2.5 1 2-3.4zm-6.6 2.4a3.4 3.4 0 1 1 0-6.8 3.4 3.4 0 0 1 0 6.8z"/></svg>
 </a>
 <main>
+  <p id=notice hidden><span id=noticetext></span> <a id=grab href="#">Download it now.</a></p>
+  <div id=loading hidden>
+    <div id=lbar><div id=lfill></div></div>
+    <p>downloading…</p>
+  </div>
   <section id=keys hidden>
     <h2>Keys</h2>
     <p class=sub>Both are free. Tutorial on github</p>
@@ -135,10 +156,14 @@ h1{font-size:21px;font-weight:600;letter-spacing:-.01em;margin:22px 0 3px}
         <div><b>new genres</b></div>
         <div id=newbox><svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg></div>
       </div>
-      <div class=obsblock>
+      <div class=obsblock id=obsblock0>
         <div class=obshead><span>obscurity</span><span class=val id=obsval>1.0</span></div>
         <p class=obshint>0 = can recieve famous songs, 1 = no preference, 3 = only niche songs</p>
         <input type=range id=obs min=0 max=3 step=0.1>
+      </div>
+      <div id=ultrarow0>
+        <div><b>ultra obscure</b></div>
+        <div id=ultrabox0><svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg></div>
       </div>
     </div>
 </section>
@@ -162,6 +187,12 @@ h1{font-size:21px;font-weight:600;letter-spacing:-.01em;margin:22px 0 3px}
         <button class=ico id=like title=like>
           <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.7-9A5.4 5.4 0 0 1 12 6.1a5.4 5.4 0 0 1 9.7 5.9C19.5 16.4 12 21 12 21z"/></svg>
         </button>
+        <div id=vol>
+          <button class=ico id=volbtn title=volume>
+            <svg viewBox="0 0 24 24"><path id=volpath d="M3 10v4h4l5 4V6L7 10H3zm13.5 2a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg>
+          </button>
+          <input type=range id=volrange min=0 max=1 step=0.01>
+        </div>
       </div>
     </div>
     <p id=why></p>
@@ -183,6 +214,11 @@ $('play').onclick = () => {
   else { audio.pause(); $('pp').setAttribute('d', 'M8 5v14l11-7z'); }
 };
 $('newrow').onclick = () => $('newrow').classList.toggle('on');
+$('ultrarow0').onclick = () => {
+  const off = $('ultrarow0').classList.toggle('on');
+  $('obs').disabled = off;
+  $('obsblock0').classList.toggle('off', off);
+};
 
 async function sendToSpotify(win) {
   for (let i = 0; i < 50; i++) {
@@ -201,6 +237,33 @@ function paintSlider() {
   $('obsval').textContent = parseFloat(o.value).toFixed(1);
 }
 $('obs').oninput = paintSlider;
+
+const SPEAKER = 'M3 10v4h4l5 4V6L7 10H3zm13.5 2a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z';
+const MUTED = 'M3 10v4h4l5 4V6L7 10H3zm16.6 1.4L18.2 10l-1.7 1.7L14.8 10l-1.4 1.4 1.7 1.6-1.7 1.6 1.4 1.4 1.7-1.7 1.7 1.7 1.4-1.4-1.7-1.6z';
+let volTimer;
+function paintVolume() {
+  const v = $('volrange');
+  v.style.setProperty('--pct', v.value * 100 + '%');
+  audio.volume = parseFloat(v.value);
+  $('volpath').setAttribute('d', parseFloat(v.value) === 0 ? MUTED : SPEAKER);
+  try { localStorage.setItem('volume', v.value); } catch (e) {}
+}
+function holdVolume() {
+  clearTimeout(volTimer);
+  volTimer = setTimeout(() => $('vol').classList.remove('open'), 3000);
+}
+$('volbtn').onclick = e => {
+  e.stopPropagation();
+  if ($('vol').classList.toggle('open')) holdVolume(); else clearTimeout(volTimer);
+};
+$('volrange').oninput = () => { paintVolume(); holdVolume(); };
+$('volrange').onclick = e => e.stopPropagation();
+document.addEventListener('click', () => {
+  $('vol').classList.remove('open');
+  clearTimeout(volTimer);
+});
+try { $('volrange').value = localStorage.getItem('volume') ?? 1; } catch (e) { $('volrange').value = 1; }
+paintVolume();
 document.querySelectorAll('.src').forEach(b => b.onclick = () => {
   source = b.dataset.v;
   document.querySelectorAll('.src').forEach(x => x.classList.toggle('on', x === b));
@@ -241,6 +304,7 @@ $('dislike').onclick = () => judge('dislike');
 $('reroll').onclick = async () => {
   $('card').classList.remove('in');
   const r = await call('reroll');
+  if (r.error) return $('card').classList.add('in');
   show(r);
 };
 
@@ -261,6 +325,9 @@ async function drawSetup() {
   states = g.states;
   $('newrow').classList.toggle('on', g.new);
   $('obs').value = g.obscurity;
+  $('ultrarow0').classList.toggle('on', g.ultra);
+  $('obs').disabled = g.ultra;
+  $('obsblock0').classList.toggle('off', g.ultra);
   paintSlider();
   $('glist').innerHTML = '';
   for (const [name] of g.buckets) {
@@ -277,6 +344,8 @@ async function drawSetup() {
 
 async function boot() {
   const s = await (await fetch('/api/status')).json();
+  $('card').hidden = true;
+  $('card').classList.remove('in');
   $('setup').hidden = true;
   $('keys').hidden = true;
   mode = !s.keys ? 'keys' : !s.ready ? 'login' : !s.configured ? 'setup' : 'today';
@@ -306,11 +375,12 @@ $('go').onclick = async () => {
     $('msg').textContent = 'checking\u2026';
     const r = await (await fetch('/api/keys', {method: 'POST', body: JSON.stringify(
       {spotify_client_id: $('k_sp').value, lastfm_api_key: $('k_lf').value})})).json();
-    $('e_sp').hidden = r.spotify;
-    $('e_lf').hidden = r.lastfm;
-    $('k_sp').classList.toggle('bad', !r.spotify);
-    $('k_lf').classList.toggle('bad', !r.lastfm);
-    $('msg').textContent = '';
+    $('e_sp').hidden = r.spotify !== false;
+    $('e_lf').hidden = r.lastfm !== false;
+    $('k_sp').classList.toggle('bad', r.spotify === false);
+    $('k_lf').classList.toggle('bad', r.lastfm === false);
+    $('msg').textContent = r.spotify === null || r.lastfm === null
+      ? 'could not reach Spotify or Last.fm, check your connection' : '';
     $('go').disabled = false;
     if (r.ok) return boot();
     return;
@@ -341,6 +411,7 @@ $('go').onclick = async () => {
     }
     await fetch('/api/prefs', {method: 'POST', body: JSON.stringify(
       {states, source, new: $('newrow').classList.contains('on'),
+       ultra: $('ultrarow0').classList.contains('on'),
        obscurity: parseFloat($('obs').value)})});
     $('go').disabled = false;
     return boot();
@@ -351,5 +422,54 @@ $('go').onclick = async () => {
   $('go').hidden = true;
   show(r);
 };
-boot();
+async function checkUpdate() {
+  try {
+    if (sessionStorage.getItem('updated')) {
+      sessionStorage.removeItem('updated');
+      $('noticetext').textContent = 'Download done.';
+      $('grab').hidden = true;
+      $('notice').hidden = false;
+      return;
+    }
+  } catch (err) {}
+  try {
+    const u = await (await fetch('/api/update')).json();
+    if (!u.available) return;
+    $('noticetext').textContent = 'New update available.';
+    $('grab').hidden = false;
+    $('notice').hidden = false;
+  } catch (e) {}
+}
+
+$('grab').onclick = async e => {
+  e.preventDefault();
+  for (const id of ['notice', 'gear', 'card', 'setup', 'keys', 'go', 'back'])
+    $(id).hidden = true;
+  $('msg').textContent = '';
+  $('loading').hidden = false;
+  await fetch('/api/update', {method: 'POST'});
+  while (true) {
+    await new Promise(r => setTimeout(r, 300));
+    const u = await (await fetch('/api/update')).json();
+    $('lfill').style.width = u.percent + '%';
+    if (u.state === 'done') {
+      try { sessionStorage.setItem('updated', '1'); } catch (err) {}
+      for (let i = 0; i < 60; i++) {
+        await new Promise(r => setTimeout(r, 500));
+        try { if ((await fetch('/api/status', {cache: 'no-store'})).ok) break; } catch (err) {}
+      }
+      return location.reload();
+    }
+    if (u.state !== 'downloading') {
+      $('loading').hidden = true;
+      await boot();
+      $('noticetext').textContent = 'Download failed.';
+      $('notice').hidden = false;
+      return;
+    }
+  }
+};
+
+window.addEventListener('pageshow', e => { if (e.persisted) boot(); });
+boot().then(checkUpdate);
 </script>

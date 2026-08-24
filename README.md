@@ -112,10 +112,7 @@ The gear in the top left opens `/settings`.
 - **Songs** — every track, click to switch one off so it stops counting towards your taste.
   With **only saved** selected, everything that is not a saved track it's not gonna be selected.
   You can sort them by name or if they are active or not by clicking on the arrow.
-
-- **Obscurity** — a slider from 0 to 3, and a spectrum rather than an amount. At 0 you get
-  the well known artists and their songs, at 1 you get no preference over the obscurity of the songs, at 3 mostly niche artists and obscure songs. Be aware that known artists can still appear but rarely at 3. 
-
+- **Obscurity** — a slider from 0 to 3, with an additional option ultra obscure. If 0 then famous songs will be recommended and as you go higher you will be recommended less known songs. Ultra obscure will give you recommendations that are really niche or that are not known, so switch it on only if that's what you want.
 - **Similar genres** — switch on or off the new genres option.
 - **Keys** — the Spotify Client ID and Last.fm API key.
 - Three red buttons at the bottom. **Log out of Spotify** logs you out and forgets everything so you can log in with another account **Reset likes and dislikes** forgets every vote and every banned artist(artists are banned after 3 dislikes).

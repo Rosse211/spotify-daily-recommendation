@@ -26,42 +26,59 @@ def test_ban_after_three_dislikes():
     assert fb["weights"]["Seed"] == -3
 
 
-def wins_for_small(obscurity=None, rounds=2000):
-    small, big = {"n": 800}, {"n": 5_000_000}
-    setting = {} if obscurity is None else {"obscurity": obscurity}
-    return sum(1 for trial in range(rounds)
-               if app.by_obscurity([small, big], lambda a: a["n"],
-                                   random.Random(trial), **setting)[0] is small)
+def band_of(value):
+    return min((0, 1, 2, 3), key=lambda o: abs(value - app.target_score(o)))
 
 
-def test_lesser_known_preferred():
-    assert wins_for_small() > 1200, "the default must lean towards the unknown"
+def test_the_score_spans_the_whole_range():
+    assert app.score(8_000_000, 40_000_000) > 9.3
+    assert app.score(50, 30) < 0.6
+    middle = app.score(200_000, 300_000)
+    assert 4 < middle < 7, middle
 
 
-def test_obscurity_is_a_spectrum():
-    famous, neutral, deep = wins_for_small(0), wins_for_small(1.0), wins_for_small(3.0)
-    assert famous < 800, f"at 0 the big name should usually win, it won {100 - famous / 20:.0f}%"
-    assert 900 < neutral < 1100, f"at 1 it should be neutral, got {neutral / 20:.0f}%"
-    assert deep > 1500, f"at 3 should only be niches, it won {100 - deep / 20:.0f}%"
-    assert famous < neutral < deep
+def test_the_score_survives_the_edges():
+    assert app.score(0, 0) == 0
+    assert app.score(-5, -5) == 0
+    assert app.score(10 ** 12, 10 ** 12) == 10, "past the anchors it must clamp, not overshoot"
+    assert app.score(4_000, 0) == app.score(4_000, -1)
 
 
-def test_deep_cuts_follow_the_slider():
-    tracks = [{"rank": r} for r in (887_704, 843_594, 813_640, 793_629, 789_675,
-                                    777_768, 772_903, 763_186, 757_686, 715_379)]
-    by_plays = sorted(tracks, key=lambda t: t["rank"], reverse=True)
+def test_a_track_lastfm_never_saw_is_not_proof_of_obscurity():
+    unheard = app.score(5_000_000, None)
+    silent = app.score(5_000_000, 0)
+    assert unheard > silent
+    assert abs(unheard - 10 * app.normalise(5_000_000, app.ARTIST_SPAN)) < 1e-9
 
-    def mean_position(obscurity):
-        picks = []
-        for trial in range(400):
-            rnd = random.Random(trial)
-            picks.append(by_plays.index(app.deep_cut_order(tracks, rnd, obscurity)[0]))
-        return sum(picks) / len(picks)
 
-    hits, even, deep = mean_position(0), mean_position(1.0), mean_position(3.0)
-    assert hits < 3.5, f"at 0 it should pick near the top of the list, got {hits:.1f}/9"
-    assert 4.0 < even < 5.0, f"at 1 every track should be equally likely, got {even:.1f}/9"
-    assert deep > 6.5, f"at 3 it should sit near the bottom, got {deep:.1f}/9"
+def test_the_slider_lands_where_you_asked():
+    cases = [("Ed Sheeran, Shape of You", 4_326_437, 12_465_814, 0),
+             ("Kanye West, a 1.4M track", 8_101_603, 1_400_291, 1),
+             ("The Weeknd, a 10k deep cut", 5_488_810, 10_000, 2),
+             ("a nobody with 5k plays", 5_000, 5_000, 3)]
+    for name, listeners, plays, want in cases:
+        got = band_of(app.score(listeners, plays))
+        assert got == want, f"{name}: expected {want}, got {got}"
+
+
+def test_fame_and_obscurity_cancel_out():
+    weeknd = 5_488_810
+    assert app.reachable(weeknd, app.target_score(2), app.SCORE_WINDOW)
+    assert not app.reachable(weeknd, app.target_score(3), app.SCORE_WINDOW)
+    assert not app.reachable(5_000, app.target_score(0), app.SCORE_WINDOW)
+
+
+def test_the_search_starts_from_the_right_end():
+    tracks = [{"rank": 100}, {"rank": 900}, {"rank": 500}]
+    hits = app.track_need(app.target_score(0), 5_000_000)
+    deep = app.track_need(app.target_score(3), 5_000_000)
+    assert app.search_order(tracks, hits)[0]["rank"] == 900
+    assert app.search_order(tracks, deep)[0]["rank"] == 100
+
+
+def test_chasing_hits_never_pays_for_album_lookups():
+    assert app.track_need(app.target_score(0), 5_000_000) > app.DEEP_CUT_NEED
+    assert app.track_need(app.target_score(3), 5_000_000) < app.DEEP_CUT_NEED
 
 
 def test_language_from_tags():
@@ -73,14 +90,19 @@ def test_language_from_tags():
     assert L(["rock", "alternative"]) is None
     assert L(["k-pop", "pop"]) == "korean"
     assert L(["deutschrap"]) == "german"
-    assert L(["british", "indie"]) == "english"
+    assert L(["british", "indie"]) is None, "a country is not a language"
     assert L(["electronic", "house", "dance", "french"]) is None, "dance scene is not a language"
     assert L(["italo disco", "disco"]) is None
     assert L(["reggaeton", "trap", "latin"]) == "spanish"
-    assert L(["hardcore", "brazilian", "melodic hardcore", "italian", "rap"]) is None, \
+    assert L(["hardcore", "portuguese", "melodic hardcore", "italian", "rap"]) is None, \
         "when the tags disagree, admit we do not know"
-    assert L(["rap", "italian", "hip-hop", "brazilian", "italian rap"]) == "italian", \
+    assert L(["rap", "italian", "hip-hop", "portuguese", "italian rap"]) == "italian", \
         "a clear majority still wins"
+    assert L(["indie pop", "twee", "england", "uk", "italia"]) is None, \
+        "where they live says nothing about what they sing in"
+    assert L(["american", "hip hop", "usa"]) is None
+    assert L(["uk", "italian rap", "italia"]) == "italian", \
+        "a language word still counts, the places around it do not"
 
 
 def test_genres_ranked_by_plays():
@@ -212,9 +234,13 @@ def test_real_round_network():
 
 if __name__ == "__main__":
     test_ban_after_three_dislikes()
-    test_lesser_known_preferred()
-    test_obscurity_is_a_spectrum()
-    test_deep_cuts_follow_the_slider()
+    test_the_score_spans_the_whole_range()
+    test_the_score_survives_the_edges()
+    test_a_track_lastfm_never_saw_is_not_proof_of_obscurity()
+    test_the_slider_lands_where_you_asked()
+    test_fame_and_obscurity_cancel_out()
+    test_the_search_starts_from_the_right_end()
+    test_chasing_hits_never_pays_for_album_lookups()
     test_like_and_dislike_are_one_switch()
     test_neither_moves_on()
     test_reroll_stops_at_the_limit()
