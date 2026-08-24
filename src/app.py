@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-import json, math, random, re, socket, sys, threading, time, traceback, urllib.parse, urllib.request, webbrowser
+import json, math, os, random, re, socket, sys, threading, time, traceback, urllib.parse, urllib.request, webbrowser
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import spotify_dump as sp
+
+sys.path.insert(0, str(sp.ROOT))
+try:
+    import update as up
+except ImportError:
+    up = None
 
 DATA = sp.DATA
 PAGES = sp.ROOT / "pages"
@@ -15,6 +21,7 @@ ARTISTS = DATA / "artists.json"
 TRACKS = DATA / "tracks.json"
 PREFS = DATA / "prefs.json"
 TOP_GENRES = 5
+GENRES_VERSION = 2
 DISLIKES_TO_BAN = 3
 MAX_REROLLS = 3
 UNKNOWN = "unknown"
@@ -377,13 +384,17 @@ def compute_genres(source="all", overrides=None):
     data = {"top": top, "counts": dict(sorted(counts.items(), key=lambda kv: -kv[1]))}
     cached = load(GENRES, {})
     cached[source] = data
+    cached["version"] = GENRES_VERSION
     GENRES.write_text(json.dumps(cached, ensure_ascii=False, indent=1), encoding="utf-8")
     save_genre_cache()
     return data
 
 
 def genres_for(source, overrides=None):
-    return load(GENRES, {}).get(source) or compute_genres(source, overrides)
+    cached = load(GENRES, {})
+    if cached.get("version") == GENRES_VERSION and cached.get(source):
+        return cached[source]
+    return compute_genres(source, overrides)
 
 
 def language_of_bucket(bucket):
@@ -852,6 +863,43 @@ def settings_data():
             "buckets": buckets, "tracks": rows}
 
 
+UPDATE = {"state": "idle", "percent": 0, "available": None, "tag": None}
+_release = [None]
+
+
+def update_status():
+    if UPDATE["available"] is None:
+        UPDATE["available"] = False
+        if up and not up.cloned():
+            try:
+                _release[0] = up.latest()
+                tag = _release[0].get("tag_name")
+                UPDATE["tag"] = tag
+                UPDATE["available"] = bool(tag) and tag != up.installed()
+            except Exception as e:
+                warn("update check", e)
+    return UPDATE
+
+
+def restart():
+    os.execv(sys.executable, [sys.executable, str(sp.HERE / "app.py"), "--restarted"])
+
+
+def update_run():
+    def go():
+        try:
+            up.apply(_release[0], lambda got, total: UPDATE.update(
+                percent=int(100 * got / total) if total else 0))
+            UPDATE.update(state="done", percent=100, available=False)
+            threading.Timer(1.0, restart).start()
+        except Exception as e:
+            warn("update", e)
+            UPDATE.update(state="failed", percent=0)
+
+    UPDATE.update(state="downloading", percent=0)
+    threading.Thread(target=go, daemon=True).start()
+
+
 WRITER = threading.Lock()
 
 
@@ -922,6 +970,8 @@ class Handler(BaseHTTPRequestHandler):
                      "ultra": bool(saved.get("ultra", False)),
                      "obscurity": float(saved.get("obscurity", 2.0))},
                     ensure_ascii=False))
+            if self.path == "/api/update":
+                return self._send(json.dumps(update_status()))
             if self.path == "/api/pending":
                 return self._send(json.dumps({"url": sp.PENDING["url"]}))
             if self.path == "/api/login":
@@ -975,6 +1025,10 @@ class Handler(BaseHTTPRequestHandler):
                     GENRES.unlink(missing_ok=True)
                     TODAY.unlink(missing_ok=True)
                 return self._send(json.dumps({"ok": True}))
+            if self.path == "/api/update":
+                if _release[0] and UPDATE["state"] != "downloading":
+                    update_run()
+                return self._send(json.dumps(UPDATE))
             if self.path == "/api/keys":
                 cid, lfm = body.get("spotify_client_id", ""), body.get("lastfm_api_key", "")
                 port = str(body.get("port", "")).strip()
@@ -1051,7 +1105,8 @@ def main():
         sys.exit(f"Port {PORT} is busy with something else.\n"
                  f"Set a different \"port\" in {sp.CONFIG} and start again.")
     print(URL)
-    webbrowser.open(URL)
+    if "--restarted" not in sys.argv:
+        webbrowser.open(URL)
     try:
         ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
     except KeyboardInterrupt:

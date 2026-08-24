@@ -73,6 +73,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:17px;heigh
 input[type=range]::-moz-range-thumb{width:17px;height:17px;border:0;border-radius:50%;
                   background:var(--fg);cursor:pointer;box-shadow:0 0 0 4px #9d6bff33}
 input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:transparent}
+#notice{font-size:13.5px;color:var(--dim);margin:0 0 24px}
+#notice a{color:var(--purple);text-decoration:underline;cursor:pointer}
+#lbar{height:4px;border-radius:2px;background:#ffffff1f;overflow:hidden;margin:0 0 16px}
+#lfill{height:100%;width:0;background:var(--purple);border-radius:2px;transition:width .25s}
+#loading p{color:var(--dim);font-size:13.5px;margin:0}
 #card{opacity:0;transform:translateY(8px);transition:opacity .5s,transform .5s}
 #card.in{opacity:1;transform:none}
 #cover{width:352px;height:352px;border-radius:16px;object-fit:cover;background:#17171a;display:block;
@@ -114,6 +119,11 @@ h1{font-size:21px;font-weight:600;letter-spacing:-.01em;margin:22px 0 3px}
   <svg viewBox="0 0 24 24"><path d="M19.4 13a7.8 7.8 0 0 0 0-2l2-1.6-2-3.4-2.5 1a7.6 7.6 0 0 0-1.7-1L14.8 3h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.4L6.6 11a7.8 7.8 0 0 0 0 2l-2 1.6 2 3.4 2.5-1c.5.4 1.1.8 1.7 1l.4 2.6h4l.4-2.6c.6-.2 1.2-.6 1.7-1l2.5 1 2-3.4zm-6.6 2.4a3.4 3.4 0 1 1 0-6.8 3.4 3.4 0 0 1 0 6.8z"/></svg>
 </a>
 <main>
+  <p id=notice hidden><span id=noticetext></span> <a id=grab href="#">Download it now.</a></p>
+  <div id=loading hidden>
+    <div id=lbar><div id=lfill></div></div>
+    <p>downloading…</p>
+  </div>
   <section id=keys hidden>
     <h2>Keys</h2>
     <p class=sub>Both are free. Tutorial on github</p>
@@ -412,6 +422,54 @@ $('go').onclick = async () => {
   $('go').hidden = true;
   show(r);
 };
+async function checkUpdate() {
+  try {
+    if (sessionStorage.getItem('updated')) {
+      sessionStorage.removeItem('updated');
+      $('noticetext').textContent = 'Download done.';
+      $('grab').hidden = true;
+      $('notice').hidden = false;
+      return;
+    }
+  } catch (err) {}
+  try {
+    const u = await (await fetch('/api/update')).json();
+    if (!u.available) return;
+    $('noticetext').textContent = 'New update available.';
+    $('grab').hidden = false;
+    $('notice').hidden = false;
+  } catch (e) {}
+}
+
+$('grab').onclick = async e => {
+  e.preventDefault();
+  for (const id of ['notice', 'gear', 'card', 'setup', 'keys', 'go', 'back'])
+    $(id).hidden = true;
+  $('msg').textContent = '';
+  $('loading').hidden = false;
+  await fetch('/api/update', {method: 'POST'});
+  while (true) {
+    await new Promise(r => setTimeout(r, 300));
+    const u = await (await fetch('/api/update')).json();
+    $('lfill').style.width = u.percent + '%';
+    if (u.state === 'done') {
+      try { sessionStorage.setItem('updated', '1'); } catch (err) {}
+      for (let i = 0; i < 60; i++) {
+        await new Promise(r => setTimeout(r, 500));
+        try { if ((await fetch('/api/status', {cache: 'no-store'})).ok) break; } catch (err) {}
+      }
+      return location.reload();
+    }
+    if (u.state !== 'downloading') {
+      $('loading').hidden = true;
+      await boot();
+      $('noticetext').textContent = 'Download failed.';
+      $('notice').hidden = false;
+      return;
+    }
+  }
+};
+
 window.addEventListener('pageshow', e => { if (e.persisted) boot(); });
-boot();
+boot().then(checkUpdate);
 </script>
