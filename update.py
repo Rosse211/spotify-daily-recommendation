@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parent
 REPO = "Rosse211/spotify-daily-recommendation"
 LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
 STAMP = ROOT / "data" / "version.json"
+VERSION = "v1.1"  # bump on every release: it is what a plain zip unpack reports
 FOLDERS = ("src", "pages", "docs")
 FILES = ("README.md", "LICENSE", ".gitignore", "update.py",
          "Daily recommendation.bat", "Daily recommendation.command")
@@ -30,10 +31,10 @@ def latest():
 def installed():
     if STAMP.exists():
         try:
-            return json.loads(STAMP.read_text(encoding="utf-8")).get("tag")
+            return json.loads(STAMP.read_text(encoding="utf-8")).get("tag") or VERSION
         except ValueError:
-            return None
-    return None
+            pass
+    return VERSION
 
 
 def cloned():

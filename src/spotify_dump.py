@@ -197,15 +197,23 @@ def flatten(t):
 
 
 
+PROGRESS = {"phase": "", "percent": 0}
+
+
+def stage(phase, percent):
+    PROGRESS.update(phase=phase, percent=int(percent))
+
+
 def main():
     client_id = config("spotify_client_id")
     if not client_id:
         sys.exit("No Spotify client ID yet. Add it in the app's settings.")
+    stage("waiting for Spotify", 0)
     tok = token(client_id)
     me = get("me", tok)
     print(f"Logged in as {me['display_name']}")
 
-
+    stage("reading your top tracks", 5)
     tops = {}
     for rng in ("short_term", "medium_term", "long_term"):
         tops[rng] = [f for f in map(flatten, paged("me/top/tracks", tok, cap=200, time_range=rng)) if f]
@@ -227,12 +235,17 @@ def main():
 
     tracks = [t for r in tops.values() for t in r]
     note(tracks, "top tracks")
+    stage("reading your saved tracks", 20)
     saved = [f for f in (flatten(i.get("track")) for i in paged("me/tracks", tok)) if f]
     note(saved, "saved")
     tracks += saved
     playlist_tracks = []
     print(f"  saved tracks included, {len(tracks)} total")
-    for pl in paged("me/playlists", tok):
+    stage("reading your playlists", 30)
+    playlists = paged("me/playlists", tok)
+    for i, pl in enumerate(playlists):
+        # the playlists are the long part, and their count is known: real progress
+        stage(f"playlist {i + 1} of {len(playlists)}", 30 + 60 * i / max(1, len(playlists)))
         if not pl:
             continue
         try:
@@ -251,6 +264,7 @@ def main():
     (DATA / "seeds.json").write_text(json.dumps(seeds, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"  taste sources: {len(saved)} saved, {len(playlist_tracks)} from playlists")
 
+    stage("finishing", 95)
     known_file = DATA / "known.json"
     before = json.loads(known_file.read_text(encoding="utf-8")) if known_file.exists() else {}
     known_tracks = set(before.get("tracks", [])) | {key(t["artist"], t["title"]) for t in tracks}
@@ -267,6 +281,7 @@ def main():
 
     if len(distinct) < 100:
         print("\nWarning: fewer than 100 distinct tracks, the seed set is thin.")
+    stage("done", 100)
 
 
 def test():
