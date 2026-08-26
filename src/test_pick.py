@@ -214,6 +214,31 @@ def test_dead_end_keeps_the_card():
         app.pick = real_pick
 
 
+def test_a_cache_survives_parallel_writers():
+    import threading
+    path = HERE / "write_test.json"
+    path.unlink(missing_ok=True)
+    blew_up = []
+
+    def hammer(n):
+        payload = {f"k{i}": "x" * 200 for i in range(400 + n * 900)}
+        for _ in range(12):
+            try:
+                app.write_json(path, payload, ensure_ascii=False)
+            except Exception as e:
+                blew_up.append(e)
+
+    threads = [threading.Thread(target=hammer, args=(n,)) for n in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not blew_up, blew_up[:2]
+    json.loads(path.read_text(encoding="utf-8"))
+    assert not list(HERE.glob("write_test.json.*.tmp")), "temp files left behind"
+    path.unlink()
+
+
 def test_real_round_network():
     if not (HERE / "config.json").exists() or not (HERE / "seeds.json").exists():
         print("  skipped: no config.json or seeds.json, run the app first")
@@ -250,6 +275,7 @@ if __name__ == "__main__":
     test_focus_noise_ignored()
     test_taste_source()
     test_track_overrides()
+    test_a_cache_survives_parallel_writers()
     test_real_round_network()
     reset()
     print("ok")
