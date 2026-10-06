@@ -23,7 +23,8 @@ TRACKS = DATA / "tracks.json"
 PREFS = DATA / "prefs.json"
 TAGS = DATA / "tags.json"
 TOP_GENRES = 5
-GENRES_VERSION = 2
+GENRES_VERSION = 4
+NO_GENRES = {"top": [], "counts": {}}
 DISLIKES_TO_BAN = 3
 MAX_REROLLS = 3
 UNKNOWN = "unknown"
@@ -73,6 +74,11 @@ def load_cache(path):
 def write_json(path, data, **kw):
     tmp = path.with_suffix(f"{path.suffix}.{os.getpid()}.{threading.get_ident()}.tmp")
     tmp.write_text(json.dumps(data, **kw), encoding="utf-8")
+    for _ in range(20):
+        try:
+            return tmp.replace(path)
+        except PermissionError:  # Windows: another thread is replacing the same file
+            time.sleep(0.05)
     tmp.replace(path)
 
 
@@ -133,16 +139,34 @@ LANGUAGES = {
     "french": "french", "francais": "french", "francophone": "french",
     "spanish": "spanish", "espanol": "spanish", "reggaeton": "spanish",
     "german": "german", "deutsch": "german", "deutschrap": "german",
-    "portuguese": "portuguese",
-    "japanese": "japanese", "j-pop": "japanese", "j-rock": "japanese",
-    "korean": "korean", "k-pop": "korean",
+    "portuguese": "portuguese", "brazilian": "portuguese", "mpb": "portuguese",
+    "sertanejo": "portuguese", "fado": "portuguese",
+    "japanese": "japanese", "j-pop": "japanese", "j-rock": "japanese", "j-rap": "japanese",
+    "enka": "japanese",
+    "korean": "korean", "k-pop": "korean", "k-rap": "korean", "k-indie": "korean",
     "english": "english",
+    "russian": "russian", "ukrainian": "ukrainian", "polish": "polish", "polski": "polish",
+    "czech": "czech", "slovak": "slovak", "hungarian": "hungarian", "romanian": "romanian",
+    "bulgarian": "bulgarian", "serbian": "serbian", "croatian": "croatian",
+    "slovenian": "slovenian", "greek": "greek", "laiko": "greek", "turkish": "turkish",
+    "turkce": "turkish", "arabesk": "turkish", "dutch": "dutch", "nederlandstalig": "dutch",
+    "swedish": "swedish", "svensk": "swedish", "norwegian": "norwegian", "norsk": "norwegian",
+    "danish": "danish", "dansk": "danish", "finnish": "finnish", "suomi": "finnish",
+    "icelandic": "icelandic", "estonian": "estonian", "latvian": "latvian",
+    "lithuanian": "lithuanian", "catalan": "catalan", "arabic": "arabic", "hebrew": "hebrew",
+    "israeli": "hebrew", "persian": "persian", "hindi": "hindi", "bollywood": "hindi",
+    "punjabi": "punjabi", "bhangra": "punjabi", "tamil": "tamil", "chinese": "chinese",
+    "mandarin": "chinese", "c-pop": "chinese", "mandopop": "chinese", "cantopop": "chinese",
+    "cantonese": "chinese", "thai": "thai", "t-pop": "thai", "vietnamese": "vietnamese",
+    "v-pop": "vietnamese", "indonesian": "indonesian", "filipino": "filipino",
+    "tagalog": "filipino", "opm": "filipino", "swahili": "swahili",
 }
 NO_LYRICS = {"instrumental", "instrumentals", "instrumental hip-hop",
              "ambient", "soundtrack", "score", "lo-fi beats"}
 SCENE_TAGS = {"french house", "french touch", "italo disco", "italo house",
               "italo dance", "latin jazz", "afro house", "german techno",
-              "british invasion", "spanish guitar", "latin freestyle"}
+              "british invasion", "spanish guitar", "latin freestyle", "dutch house",
+              "swedish house", "brazilian jazz", "brazilian phonk", "russian phonk"}
 DANCE_TAGS = {"house", "techno", "electro", "electronica", "electronic", "edm", "trance",
               "downtempo", "idm", "minimal", "drum and bass", "dnb", "breakbeat", "dance"}
 FOCUS_NOISE = re.compile(
@@ -234,7 +258,7 @@ def artists_info(names):
             entry = cache.get(n) or {}
             try:
                 if "tags" not in entry:
-                    entry = {"tags": tags_of(n)}
+                    entry["tags"] = tags_of(n)
                 entry["listeners"] = stats_of(n)
                 _lfm_fail[0] = 0
                 return n, entry
@@ -408,36 +432,29 @@ def all_tracks(seeds):
             + seeds.get("saved", []) + seeds.get("playlists", []))
 
 
-def is_active(track_key, in_source, overrides):
-    return overrides.get(track_key, in_source)
-
-
-def taste_tracks(seeds, source, overrides=None):
+def taste_tracks(seeds, overrides=None):
     overrides = overrides or {}
-    saved = {sp.key(t["artist"], t["title"]) for t in seeds.get("saved", [])}
-    return [t for t in all_tracks(seeds)
-            if is_active(sp.key(t["artist"], t["title"]),
-                         source != "saved" or sp.key(t["artist"], t["title"]) in saved, overrides)]
+    return [t for t in all_tracks(seeds) if overrides.get(sp.key(t["artist"], t["title"]), True)]
 
 
-def play_counts(seeds, source="all", overrides=None):
+def play_counts(seeds, overrides=None):
     counts = {}
-    for t in taste_tracks(seeds, source, overrides):
+    for t in taste_tracks(seeds, overrides):
         counts[t["artist"]] = counts.get(t["artist"], 0) + 1
     return counts
 
 
-def taste_artists(seeds, source, overrides=None):
-    if source != "saved" and not overrides:
+def taste_artists(seeds, overrides=None):
+    if not overrides:
         return seeds["artists"]
-    plays = play_counts(seeds, source, overrides)
+    plays = play_counts(seeds, overrides)
     return [{"name": n} for n in sorted(plays, key=plays.get, reverse=True)]
 
 
-def compute_genres(source="all", overrides=None):
+def compute_genres(overrides=None):
     seeds = json.loads((DATA / "seeds.json").read_text(encoding="utf-8"))
-    artists = taste_artists(seeds, source, overrides)
-    plays = play_counts(seeds, source, overrides)
+    artists = taste_artists(seeds, overrides)
+    plays = play_counts(seeds, overrides)
     info = artists_info([a["name"] for a in artists])
     counts = {}
     for a in artists:
@@ -452,20 +469,18 @@ def compute_genres(source="all", overrides=None):
         b = bucket_of(genre_name(g), info[a["name"]]["lang"])
         counts[b] = counts.get(b, 0) + max(1, plays.get(a["name"], 0))
     top = sorted(counts, key=counts.get, reverse=True)[:TOP_GENRES]
-    data = {"top": top, "counts": dict(sorted(counts.items(), key=lambda kv: -kv[1]))}
-    cached = load(GENRES, {})
-    cached[source] = data
-    cached["version"] = GENRES_VERSION
-    GENRES.write_text(json.dumps(cached, ensure_ascii=False, indent=1), encoding="utf-8")
+    data = {"top": top, "counts": dict(sorted(counts.items(), key=lambda kv: -kv[1])),
+            "version": GENRES_VERSION}
+    GENRES.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     save_genre_cache()
     return data
 
 
-def genres_for(source, overrides=None):
+def genres_for(overrides=None):
     cached = load(GENRES, {})
-    if cached.get("version") == GENRES_VERSION and cached.get(source):
-        return cached[source]
-    return compute_genres(source, overrides)
+    if cached.get("version") == GENRES_VERSION:
+        return cached
+    return compute_genres(overrides)
 
 
 def language_of_bucket(bucket):
@@ -485,22 +500,85 @@ def spoken_languages(genres, prefs):
     return {UNKNOWN} | {lang for lang, n in heard.items() if n / total >= LANGUAGE_SHARE}
 
 
-def language_allowed(lang, state, spoken):
+def language_allowed(lang, state, spoken, wanted=()):
+    if wanted:
+        return lang in wanted
     return spoken is None or lang in spoken or state == "in"
+
+
+# ponytail: where an artist is from is only a hint of what they sing in, used when Last.fm
+# tags say nothing; ambiguous countries (CH, BE, ...) are left out on purpose
+COUNTRY_LANG = {
+    "IT": "italian", "SM": "italian", "FR": "french", "DE": "german", "AT": "german",
+    "PT": "portuguese", "BR": "portuguese", "JP": "japanese", "KR": "korean",
+    "US": "english", "GB": "english", "IE": "english", "AU": "english", "NZ": "english",
+    "CA": "english", "JM": "english",
+    **dict.fromkeys(["ES", "MX", "AR", "CO", "CL", "PE", "VE", "PR", "CU", "UY", "DO", "EC",
+                     "BO", "PY", "GT", "HN", "SV", "NI", "CR", "PA"], "spanish"),
+    "RU": "russian", "BY": "russian", "UA": "ukrainian", "PL": "polish", "CZ": "czech",
+    "SK": "slovak", "HU": "hungarian", "RO": "romanian", "MD": "romanian", "BG": "bulgarian",
+    "RS": "serbian", "HR": "croatian", "SI": "slovenian", "GR": "greek", "CY": "greek",
+    "TR": "turkish", "NL": "dutch", "SE": "swedish", "NO": "norwegian", "DK": "danish",
+    "FI": "finnish", "IS": "icelandic", "EE": "estonian", "LV": "latvian", "LT": "lithuanian",
+    "IL": "hebrew", "IR": "persian", "CN": "chinese", "TW": "chinese", "HK": "chinese",
+    "TH": "thai", "VN": "vietnamese", "ID": "indonesian",
+    **dict.fromkeys(["EG", "SA", "IQ", "SY", "JO", "AE", "KW", "QA", "BH", "OM", "YE", "LY",
+                     "PS"], "arabic"),
+}
+ALL_LANGUAGES = sorted(set(LANGUAGES.values()) | set(COUNTRY_LANG.values()))
+UK_NATIONS = {"England", "Scotland", "Wales", "Northern Ireland"}
+MUSICBRAINZ_UA ="daily-recommendation/1.1 ( https://github.com/Rosse211/spotify-daily-recommendation )"
+_mb_last = [0.0]
+_mb_gate = threading.Lock()
+
+
+def mb_country(name):
+    with _mb_gate:  # MusicBrainz allows one request per second
+        time.sleep(max(0, 1.1 - (time.monotonic() - _mb_last[0])))
+        _mb_last[0] = time.monotonic()
+    q = urllib.parse.urlencode({"query": f'artist:"{name}"', "fmt": "json", "limit": 3})
+    req = urllib.request.Request("https://musicbrainz.org/ws/2/artist/?" + q,
+                                 headers={"User-Agent": MUSICBRAINZ_UA})
+    for a in json.load(urllib.request.urlopen(req, timeout=20)).get("artists", []):
+        if a.get("score", 0) >= 90 and sp.norm(a["name"]) == sp.norm(name):
+            area = (a.get("area") or {}).get("name")
+            return a.get("country") or ("GB" if area in UK_NATIONS else "")
+    return ""
+
+
+def sung_in(names):
+    info = artists_info(names)
+    cache = load_cache(ARTISTS)
+    todo = [n for n in dict.fromkeys(names)
+            if info[n]["lang"] == UNKNOWN and "country" not in cache.get(n, {})]
+    for n in todo:
+        try:
+            cache.setdefault(n, {})["country"] = mb_country(n)
+        except Exception as e:
+            warn(f"MusicBrainz artist {n!r}", e)
+            break
+    if todo:
+        write_json(ARTISTS, cache, ensure_ascii=False, indent=1, sort_keys=True)
+    return {n: info[n]["lang"] if info[n]["lang"] != UNKNOWN
+            else COUNTRY_LANG.get(cache.get(n, {}).get("country"), UNKNOWN) for n in names}
 
 
 def seed_order(seeds, prefs, rnd):
     weights = load(FEEDBACK, {}).get("weights", {})
     weight = lambda a: max(0.25, 1 + weights.get(a["name"], 0))
-    artists = sorted(taste_artists(seeds, prefs["source"], prefs["overrides"]),
-                     key=lambda a: rnd.random() ** (1 / weight(a)), reverse=True)[:8]
-    states = prefs["states"]
-    for tag in prefs["extra"]:
-        if states.get(pretty_genre(tag), "in") != "out":
-            pool = [{"name": n} for n in tag_artists(tag)]
-            rnd.shuffle(pool)
-            artists += pool[:4]
+    artists = [] if prefs["manual"] else sorted(
+        taste_artists(seeds, prefs["overrides"]),
+        key=lambda a: rnd.random() ** (1 / weight(a)), reverse=True)[:8]
+    per_tag = 8 if prefs["manual"] else 4
+    for tag in chosen_tags(prefs):
+        pool = [{"name": n} for n in tag_artists(tag)]
+        rnd.shuffle(pool)
+        artists += pool[:per_tag]
     return artists
+
+
+def chosen_tags(prefs):
+    return [t for t in prefs["extra"] if prefs["states"].get(pretty_genre(t), "in") != "out"]
 
 
 def bucket_for(cand, info, extra):
@@ -513,9 +591,11 @@ def bucket_for(cand, info, extra):
 
 
 def bucket_allowed(bucket, state_key, strict, prefs, detected):
-    hand_picked = state_key != bucket
+    hand_picked = state_key in {pretty_genre(t) for t in prefs["extra"]}
     state = prefs["states"].get(state_key, "in" if hand_picked else "")
     if state_key in prefs["removed"] or bucket in prefs["removed"] or state == "out":
+        return False
+    if prefs["manual"] and not hand_picked:
         return False
     if strict:
         return state == "in"
@@ -594,8 +674,9 @@ def playable(cand, known_t, seen, rnd, listeners, target, window, ultra):
 
 
 def taste_tags(seeds, prefs):
-    heard = artists_info([a["name"] for a in
-                          taste_artists(seeds, prefs["source"], prefs["overrides"])])
+    if prefs["manual"]:
+        return chosen_tags(prefs)[:ULTRA_TAGS]
+    heard = artists_info([a["name"] for a in taste_artists(seeds, prefs["overrides"])])
     counts = {}
     for entry in heard.values():
         for t in entry.get("tags", [])[:4]:
@@ -666,17 +747,24 @@ def related_to(seed, target, window, rnd, ultra):
     return keep[:6]
 
 
+def genre_slot(prefs):
+    """Let me choose keeps its own genres under "picked", library ones stay at the top level."""
+    return prefs.setdefault("picked", {}) if prefs.get("mode") == "manual" else prefs
+
+
 def read_prefs():
     stored = load(PREFS, {})
-    source = stored.get("source", "all")
-    genres = genres_for(source, stored.get("overrides", {}))
-    return {"source": source, "overrides": stored.get("overrides", {}),
-            "states": stored.get("states", {b: "in" for b in genres["top"]}),
-            "removed": set(stored.get("removed", [])),
-            "extra": [g.lower() for g in stored.get("extra", [])],
+    manual = stored.get("mode") == "manual"
+    genres = NO_GENRES if manual else genres_for(stored.get("overrides", {}))
+    slot = genre_slot(stored)
+    return {"manual": manual, "overrides": stored.get("overrides", {}),
+            "states": slot.get("states", {b: "in" for b in genres["top"]}),
+            "removed": set(slot.get("removed", [])),
+            "extra": [g.lower() for g in slot.get("extra", [])],
             "obscurity": float(stored.get("obscurity", 2.0)),
             "ultra": bool(stored.get("ultra", False)),
-            "new": stored.get("new", False)}, genres
+            "languages": stored.get("languages", []),
+            "new": stored.get("new", False) and not manual}, genres
 
 
 def pick(avoid_bucket=None):
@@ -687,7 +775,8 @@ def pick(avoid_bucket=None):
     seen_artists = {k.split(" — ")[0] for k in seen}
     prefs, genres = read_prefs()
     detected = set(genres["counts"])
-    spoken = spoken_languages(genres, prefs)
+    spoken = None if prefs["manual"] else spoken_languages(genres, prefs)
+    wanted = set(prefs["languages"])
     dislikes = load(FEEDBACK, {}).get("dislikes", {})
     banned = {a for a, n in dislikes.items() if n >= DISLIKES_TO_BAN}
     off_limits = known_a | banned | seen_artists
@@ -721,14 +810,15 @@ def pick(avoid_bucket=None):
             fresh = [c for c in related if sp.norm(c["name"]) not in off_limits
                      and not infos[c["name"]]["noise"]]
             pmap(lambda c: artist_genre(c["id"]), fresh, 4)
+            langs = sung_in([c["name"] for c in fresh]) if wanted else {}
 
             keep = []
             for cand in fresh:
                 bucket, state_key = bucket_for(cand, infos[cand["name"]], prefs["extra"])
                 if bucket == avoid_bucket:
                     continue
-                if not language_allowed(infos[cand["name"]]["lang"],
-                                        prefs["states"].get(state_key), spoken):
+                if not language_allowed(langs.get(cand["name"], infos[cand["name"]]["lang"]),
+                                        prefs["states"].get(state_key), spoken, wanted):
                     continue
                 if bucket_allowed(bucket, state_key, strict, prefs, detected):
                     keep.append((cand, bucket))
@@ -784,14 +874,15 @@ def today(avoid_bucket=None, rerolls=0):
         return cached["card"]
     card = pick(avoid_bucket)
     if not card:
-        return {"error": "No candidate found. Try clearing some dislikes."}
+        return {"error": "No candidate found. Try changing some settings."}
     return save_pick(card, rerolls)
 
 
 def nudge(seed, amount, artist=None, dislikes=0):
     fb = load(FEEDBACK, {})
     weights, counts = fb.setdefault("weights", {}), fb.setdefault("dislikes", {})
-    weights[seed] = weights.get(seed, 0) + amount
+    if seed:
+        weights[seed] = weights.get(seed, 0) + amount
     if artist and dislikes:
         counts[artist] = max(0, counts.get(artist, 0) + dislikes)
         if not counts[artist]:
@@ -818,7 +909,37 @@ def set_vote(card, target):
         nudge(card["seed"], -1, artist, +1)
     card["liked"] = target == "liked"
     card["disliked"] = target == "disliked"
+    remember_vote(card, target)
     return card
+
+
+def remember_vote(card, target):
+    fb = load(FEEDBACK, {})
+    votes = fb.setdefault("votes", {})
+    votes.pop(card["key"], None)  # re-inserted at the end, so the list stays newest last
+    if target:
+        votes[card["key"]] = {"vote": target, "title": card["title"], "artist": card["artist"],
+                              "genre": card.get("genre", ""), "seed": card.get("seed")}
+    FEEDBACK.write_text(json.dumps(fb, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def voted():
+    votes = [dict(v, key=k) for k, v in load(FEEDBACK, {}).get("votes", {}).items()][::-1]
+    return {kind: [v for v in votes if v["vote"] == kind] for kind in ("liked", "disliked")}
+
+
+def unvote(key):
+    """Take back a like or dislike from the lists, undoing what it taught the picker."""
+    cached = load(TODAY, None)
+    if cached and cached["card"]["key"] == key:
+        set_vote(cached["card"], None)
+        TODAY.write_text(json.dumps(cached, ensure_ascii=False), encoding="utf-8")
+        return cached["card"]
+    v = load(FEEDBACK, {}).get("votes", {}).get(key)
+    if v:
+        card = dict(v, key=key, seed=v.get("seed"), liked=v["vote"] == "liked", disliked=v["vote"] == "disliked")
+        set_vote(card, None)
+    return None
 
 
 def vote(action):
@@ -858,14 +979,10 @@ def lastfm_genres():
             seen.setdefault(t.lower(), set()).add(name)
     names = {pretty_genre(t) for t, on in seen.items() if len(on) >= 2}
 
-    key = lastfm_key()
-    if key:
-        url = LASTFM + urllib.parse.urlencode({"method": "tag.getTopTags", "api_key": key,
-                                               "format": "json"})
+    if lastfm_key():
         try:
             names |= {pretty_genre(t["name"]) for t in
-                      json.load(urllib.request.urlopen(url, timeout=20))
-                      .get("toptags", {}).get("tag", [])}
+                      lfm(method="tag.getTopTags").get("toptags", {}).get("tag", [])}
         except Exception as e:
             warn("Last.fm top tags", e)
 
@@ -921,13 +1038,10 @@ def check_keys(spotify_id, lastfm):
 
 
 def tag_exists(name):
-    key = lastfm_key()
-    if not key:
+    if not name or not lastfm_key():
         return False
-    url = LASTFM + urllib.parse.urlencode({"method": "tag.getInfo", "tag": name,
-                                           "api_key": key, "format": "json"})
     try:
-        d = json.load(urllib.request.urlopen(url, timeout=20))
+        d = lfm(method="tag.getInfo", tag=name)
     except Exception as e:
         warn(f"Last.fm lookup for tag {name!r}", e)
         return False
@@ -938,14 +1052,14 @@ def settings_data():
     if not (DATA / "seeds.json").exists():
         return {"error": "Log in with Spotify first."}
     prefs = load(PREFS, {})
-    source = prefs.get("source", "all")
+    mode = prefs.get("mode", "library")
     overrides = prefs.get("overrides", {})
-    genres = genres_for(source, overrides)
-    removed = set(prefs.get("removed", []))
-    states = prefs.get("states", {b: "in" for b in genres["top"]})
+    genres = NO_GENRES if mode == "manual" else genres_for(overrides)
+    slot = genre_slot(prefs)
+    removed = set(slot.get("removed", []))
+    states = slot.get("states", {b: "in" for b in genres["top"]})
     seeds = json.loads((DATA / "seeds.json").read_text(encoding="utf-8"))
     sources = load(DATA / "known.json", {}).get("sources", {})
-    saved = {sp.key(t["artist"], t["title"]) for t in seeds.get("saved", [])}
 
     rows, seen = [], set()
     for t in all_tracks(seeds):
@@ -954,16 +1068,18 @@ def settings_data():
             continue
         seen.add(k)
         rows.append([k, f"{t['artist']} \u2014 {t['title']}",
-                     is_active(k, source != "saved" or k in saved, overrides),
+                     overrides.get(k, True),
                      sources.get(k, [])])
     rows.sort(key=lambda r: r[1].lower())
-    extra = [pretty_genre(g) for g in prefs.get("extra", [])]
+    extra = [pretty_genre(g) for g in slot.get("extra", [])]
     buckets = [[g, 0, states.get(g, "in")] for g in extra if g not in removed]
     buckets += [[b, n, states.get(b, "")] for b, n in genres["counts"].items()
                 if b not in removed and b not in extra]
-    return {"source": source, "new": prefs.get("new", False), "extra": extra,
+    return {"mode": mode, "new": prefs.get("new", False), "extra": extra,
             "obscurity": float(prefs.get("obscurity", 2.0)),
             "ultra": bool(prefs.get("ultra", False)),
+            "languages": prefs.get("languages", []),
+            "all_languages": ALL_LANGUAGES,
             "removed": sorted(removed), "overrides": overrides,
             "buckets": buckets, "tracks": rows}
 
@@ -1014,6 +1130,8 @@ def page(name):
 
 
 def same_origin(handler):
+    if handler.headers.get("Host", "").rsplit(":", 1)[0] not in ("127.0.0.1", "localhost"):
+        return False
     site = handler.headers.get("Sec-Fetch-Site")
     if site and site not in ("same-origin", "same-site", "none"):
         return False
@@ -1043,7 +1161,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/tags":
                 return self._send(json.dumps(lastfm_genres(), ensure_ascii=False))
             if self.path.startswith("/api/addtag"):
-                t = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)["t"][0].strip()
+                t = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("t", [""])[0].strip()
                 return self._send(json.dumps({"ok": tag_exists(t), "name": pretty_genre(t)}))
             if self.path == "/api/status":
                 return self._send(json.dumps(
@@ -1058,21 +1176,14 @@ class Handler(BaseHTTPRequestHandler):
             if self.path.startswith("/api/genres"):
                 q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                 saved = load(PREFS, {})
-                source = q.get("source", [saved.get("source", "all")])[0]
-                if q.get("peek"):
-                    return self._send(json.dumps(
-                        {"source": source, "buckets": [], "states": {},
-                         "new": saved.get("new", False),
-                         "ultra": bool(saved.get("ultra", False)),
-                         "obscurity": float(saved.get("obscurity", 2.0))}))
-                g = genres_for(source)
-                same = saved.get("source", "all") == source
-                states = (saved.get("states") if same else None) or {
+                g = NO_GENRES if q.get("peek") else genres_for()
+                states = saved.get("states") or {
                     b: ("in" if b in g["top"] else "") for b in g["counts"]}
                 return self._send(json.dumps(
                     {"buckets": list(g["counts"].items()),
                      "states": {b: states.get(b, "") for b in g["counts"]},
-                     "new": saved.get("new", False), "source": source,
+                     "mode": saved.get("mode", "library"),
+                     "new": saved.get("new", False),
                      "ultra": bool(saved.get("ultra", False)),
                      "obscurity": float(saved.get("obscurity", 2.0))},
                     ensure_ascii=False))
@@ -1097,6 +1208,8 @@ class Handler(BaseHTTPRequestHandler):
                 finally:
                     WRITER.release()
                 return self._send(json.dumps({"ready": True}))
+            if self.path == "/api/votes":
+                return self._send(json.dumps(voted(), ensure_ascii=False))
             if self.path == "/api/today":
                 with WRITER:
                     return self._send(json.dumps(today(), ensure_ascii=False))
@@ -1135,6 +1248,10 @@ class Handler(BaseHTTPRequestHandler):
                     GENRES.unlink(missing_ok=True)
                     TODAY.unlink(missing_ok=True)
                 return self._send(json.dumps({"ok": True}))
+            if self.path == "/api/unvote":
+                with WRITER:
+                    card = unvote(str(body.get("key", "")))
+                    return self._send(json.dumps({"card": card, **voted()}, ensure_ascii=False))
             if self.path == "/api/update":
                 if _release[0] and UPDATE["state"] != "downloading":
                     update_run()
@@ -1153,19 +1270,29 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(json.dumps(dict(checked, ok=all(checked.values()))))
             if self.path == "/api/prefs":
                 body["obscurity"] = max(0.0, min(3.0, float(body.get("obscurity", 2.0))))
-                PREFS.write_text(json.dumps(body, ensure_ascii=False, indent=1), encoding="utf-8")
+                if body.get("mode") == "manual":
+                    body["picked"] = {"extra": body.pop("extra", []), "states": body.pop("states", {})}
+                with WRITER:
+                    PREFS.write_text(json.dumps(body, ensure_ascii=False, indent=1), encoding="utf-8")
+                    TODAY.unlink(missing_ok=True)
                 return self._send(json.dumps({"ok": True}))
             if self.path == "/api/settings":
                 with WRITER:
                     prefs = load(PREFS, {})
-                    prefs["states"] = {b[0]: b[2] for b in body.get("buckets", [])}
-                    prefs["removed"] = body.get("removed", [])
-                    prefs["extra"] = [g.lower() for g in body.get("extra", [])]
+                    # the genres on the page belong to the mode it was showing, so they go
+                    # into that mode's slot before a mode switch takes effect
+                    slot = genre_slot(prefs)
+                    slot["states"] = {b[0]: b[2] for b in body.get("buckets", [])}
+                    slot["removed"] = body.get("removed", [])
+                    slot["extra"] = [g.lower() for g in body.get("extra", [])]
+                    prefs["mode"] = "manual" if body.get("mode") == "manual" else "library"
                     prefs["overrides"] = body.get("overrides", {})
                     prefs["new"] = body.get("new", False)
                     prefs["obscurity"] = max(0.0, min(3.0, float(body.get("obscurity",
                                                                           2.0))))
                     prefs["ultra"] = bool(body.get("ultra", False))
+                    prefs["languages"] = [l for l in body.get("languages", [])
+                                          if l in ALL_LANGUAGES]
                     PREFS.write_text(json.dumps(prefs, ensure_ascii=False, indent=1), encoding="utf-8")
                     TODAY.unlink(missing_ok=True)
                 return self._send(json.dumps({"ok": True}))

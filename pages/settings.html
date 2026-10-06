@@ -91,6 +91,20 @@ input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:tran
 #newbox svg,#ultrabox svg{width:12px;height:12px;fill:currentColor;opacity:0}
 #newrow.on #newbox svg,#ultrarow.on #ultrabox svg{opacity:1}
 #newrow small,#ultrarow small{display:block;color:var(--dim);font-size:12px}
+#moderow{display:flex;gap:8px}
+.mode{flex:1;padding:11px;border-radius:10px;background:#ffffff0a;color:var(--dim);
+      border:1px solid transparent;transition:.18s}
+.mode:hover{background:#ffffff14}
+.mode.on{background:#ffffff1a;color:var(--fg);border-color:#ffffff2e;font-weight:600}
+.exp{color:var(--no);font-size:11px;letter-spacing:.06em;margin-left:8px;padding:2px 7px;
+     border-radius:5px;background:#e0455c1f;vertical-align:middle}
+#langs{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}
+.lang b{color:var(--no);font-weight:400;margin-left:6px}
+#lsugg{max-height:220px;gap:4px}
+.lang{padding:7px 13px;border-radius:999px;background:#ffffff0a;color:var(--dim);font-size:13.5px;
+      border:1px solid transparent;transition:.15s}
+.lang:hover{background:#ffffff14}
+.lang.on{background:#1db9541f;color:var(--fg);border-color:var(--accent)}
 #danger{display:flex;flex-direction:column;gap:10px}
 .danger{text-align:left;padding:13px 15px;border-radius:11px;background:#e0455c14;
         border:1px solid #e0455c3d;color:var(--no);transition:.18s}
@@ -104,6 +118,14 @@ input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:tran
 <main>
   <a href="/">&larr; back</a>
   <h1>Settings</h1>
+
+  <section>
+    <div class=head><h2>Suggestions based off</h2></div>
+    <div id=moderow>
+      <button class=mode data-v=manual>Let me choose</button>
+      <button class=mode data-v=library>My recent tracks</button>
+    </div>
+  </section>
 
   <section>
     <div class=head>
@@ -121,6 +143,14 @@ input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:tran
   </section>
 
   <section>
+    <div class=head><h2>Languages <span class=exp>experimental</span></h2></div>
+    <p class=hint>Only suggest songs in these languages. Artists whose language can't be told are skipped.</p>
+    <div id=langs></div>
+    <input id=lq placeholder="add a language..." autocomplete=off spellcheck=false>
+    <div class=list id=lsugg></div>
+  </section>
+
+  <section id=songs>
     <div class=head>
       <h2>Songs</h2>
       <button class="act icon" id=sort title="active first">
@@ -147,7 +177,7 @@ input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:tran
     </div>
   </section>
 
-  <section>
+  <section id=similar>
     <div class=head><h2>Similar genres</h2></div>
     <div id=newrow>
       <div><b>new genres</b></div>
@@ -202,7 +232,7 @@ function drawGenres() {
   for (const b of d.buckets) {
     const [name, n, state] = b;
     const el = document.createElement('div');
-    el.className = 'g ' + (editing ? '' : state) + (d.extra.includes(name) ? ' extra' : '');
+    el.className = 'g ' + (editing ? (d.extra.includes(name) ? 'extra' : '') : state);
     const label = document.createElement('span');
     label.textContent = name;
     el.appendChild(label);
@@ -319,7 +349,7 @@ $('allrow').onclick = () => {
 $('edit').onclick = () => {
   editing = !editing;
   $('edit').classList.toggle('on', editing);
-  $('edit').textContent = editing ? 'done' : 'edit';
+  $('edit').textContent = editing ? 'done' : 'edit/add';
   drawGenres();
 };
 $('sort').onclick = () => {
@@ -401,20 +431,84 @@ $('wipe').onclick = () => danger($('wipe'), 'reset-feedback',
 $('reload').onclick = () => danger($('reload'), 'reload-library',
   'Read your whole Spotify library again? May take a few minutes.', 'reading Spotify...');
 
-(async () => {
-  const k = await (await fetch('/api/keys')).json();
-  $('k_sp').value = k.spotify_client_id;
-  $('k_lf').value = k.lastfm_api_key;
-  $('k_pt').value = loadedPort = k.port;
+async function loadSettings() {
   d = await (await fetch('/api/settings')).json();
   d.extra = d.extra || [];
-  suggestions = await (await fetch('/api/tags')).json();
+  const manual = d.mode === 'manual';
+  document.querySelectorAll('.mode').forEach(b => b.classList.toggle('on', b.dataset.v === d.mode));
+  $('songs').hidden = manual;
+  $('similar').hidden = manual;
   $('newrow').classList.toggle('on', d.new);
   $('obs').value = d.obscurity;
   $('obsval').textContent = d.obscurity.toFixed(1);
   paintUltra();
   paintSlider();
-  drawGenres(); drawTracks();
+  drawGenres(); drawTracks(); drawLangs();
+  if (manual && !d.buckets.length && !editing) $('edit').click();
+}
+
+function drawLangs() {
+  $('langs').innerHTML = '';
+  if (!d.languages.length) {
+    const any = document.createElement('span');
+    any.className = 'lang on'; any.textContent = 'any';
+    $('langs').appendChild(any);
+  }
+  for (const l of d.languages) {
+    const b = document.createElement('button');
+    b.className = 'lang on'; b.title = 'remove';
+    const x = document.createElement('b'); x.textContent = '×';
+    b.append(l, x);
+    b.onclick = () => { d.languages = d.languages.filter(o => o !== l); drawLangs(); save(); };
+    $('langs').appendChild(b);
+  }
+  drawLangSugg();
+}
+
+function langMatches() {
+  const q = $('lq').value.trim().toLowerCase();
+  if (!q) return [];
+  const hits = d.all_languages.filter(l => l.includes(q) && !d.languages.includes(l));
+  return hits.sort((a, b) => b.startsWith(q) - a.startsWith(q));
+}
+
+function drawLangSugg() {
+  $('lsugg').innerHTML = '';
+  for (const l of langMatches()) {
+    const b = document.createElement('button');
+    b.className = 's'; b.textContent = l;
+    b.onclick = () => addLang(l);
+    $('lsugg').appendChild(b);
+  }
+}
+
+function addLang(l) {
+  d.languages = d.languages.concat([l]);
+  $('lq').value = '';
+  drawLangs(); save();
+}
+$('lq').oninput = drawLangSugg;
+$('lq').onkeydown = e => {
+  const first = langMatches()[0];
+  if (e.key === 'Enter' && first) addLang(first);
+};
+
+document.querySelectorAll('.mode').forEach(b => b.onclick = async () => {
+  if (b.dataset.v === d.mode) return;
+  d.mode = b.dataset.v;
+  await save();
+  if (d.mode === 'library') $('msg').textContent = 'analysing your listening…';
+  await loadSettings();
+  $('msg').textContent = 'saved';
+});
+
+(async () => {
+  const k = await (await fetch('/api/keys')).json();
+  $('k_sp').value = k.spotify_client_id;
+  $('k_lf').value = k.lastfm_api_key;
+  $('k_pt').value = loadedPort = k.port;
+  suggestions = await (await fetch('/api/tags')).json();
+  await loadSettings();
   $('msg').textContent = 'changes save automatically';
 })();
 </script>

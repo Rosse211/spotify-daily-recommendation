@@ -91,6 +91,10 @@ in red and nothing is saved until it works.
 
 On the first run it will ask you to login, you will need to do this only once if everything goes right, then you will be asked your preferences for the daily recommendation.
 
+The first question is what the suggestions should be based off:
+- **My recent tracks** — your genres are read from your top tracks, saved tracks and playlists.
+- **Let me choose** — you pick the genres yourself, your library is only used to skip songs and artists you already know.
+
 
 ## Daily use
 
@@ -106,16 +110,20 @@ the app, and nothing is ever suggested twice.
 
 The gear in the top left opens `/settings`.
 
+- **Suggestions based off** — switch between **Let me choose** and **My recent tracks** whenever you want.
 - **Genres** — As in the welcome page. **edit/add** turns on removal, and lets
   you add any genre Last.fm knows about, either from the suggestions or by typing it.
 
+- **Languages** — only get songs in the languages you pick (default: any). The language comes from
+  the artist's Last.fm tags or, when those say nothing, from the country MusicBrainz lists for them.
+  Artists whose language can't be told are skipped while a language is picked.(experimental for now)
 - **Songs** — every track, click to switch one off so it stops counting towards your taste.
-  With **only saved** selected, everything that is not a saved track it's not gonna be selected.
   You can sort them by name or if they are active or not by clicking on the arrow.
 - **Obscurity** — a slider from 0 to 3, with an additional option ultra obscure. If 0 then famous songs will be recommended and as you go higher you will be recommended less known songs. Ultra obscure will give you recommendations that are really niche or that are not known, so switch it on only if that's what you want.
 - **Similar genres** — switch on or off the new genres option.
+  Songs and Similar genres only show with **My recent tracks**.
 - **Keys** — the Spotify Client ID and Last.fm API key.
-- Three red buttons at the bottom. **Log out of Spotify** logs you out and forgets everything so you can log in with another account **Reset likes and dislikes** forgets every vote and every banned artist(artists are banned after 3 dislikes).
+- Three red buttons at the bottom. **Log out** logs you out and forgets everything so you can log in with another account. **Reset preferences** forgets every like/dislike and every banned artist(artists are banned after 3 dislikes).
   **Reload my library** reads your top tracks, saved tracks and playlists again from your spotify.
 
 Changes save as you make them and clear the current pick, so the next one uses them.
