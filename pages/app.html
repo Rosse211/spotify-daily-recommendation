@@ -12,6 +12,33 @@ main{position:relative;width:352px;text-align:center}
 #gear{position:fixed;top:18px;left:18px;width:34px;height:34px;display:grid;place-items:center;
       border-radius:9px;color:var(--dim);transition:.18s}
 #gear:hover{background:#ffffff12;color:var(--fg)}
+#votes,#vhalf{position:fixed;top:18px;right:18px;width:min(320px,calc(100vw - 72px));z-index:2}
+#vhalf{top:50vh}
+#llist{max-height:calc(50vh - 76px)}
+#dlist{max-height:calc(50vh - 58px)}
+.vrow{display:flex;align-items:center;gap:10px}
+.vrow::before{content:'';flex:1;height:2px;border-radius:1px;background:#ffffff26}
+.vbtn{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:var(--dim);
+      transition:.18s}
+.vbtn:hover{background:#ffffff12;color:var(--fg)}
+.vbtn svg{width:19px;height:19px;fill:currentColor}
+#vlike.on{color:var(--accent)}
+#vdis.on{color:var(--no)}
+.vlist{overflow:auto;margin:6px 0 10px;padding:6px;border-radius:12px;
+       background:#141417eb;backdrop-filter:blur(12px);text-align:left}
+.vi{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px}
+.vi:hover{background:#ffffff0a}
+.vi div{min-width:0;flex:1}
+.vi b,.vi small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vi b{font-weight:500;font-size:13.5px}
+.vi small{color:var(--dim);font-size:12px}
+.vi i{flex:none;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:normal;
+      font-size:11px;color:var(--purple);background:#9d6bff1f;padding:2px 8px;border-radius:6px}
+.vx{flex:none;width:24px;height:24px;border-radius:6px;display:grid;place-items:center;
+    color:#5c5c64;transition:.15s}
+.vx:hover{background:#e0455c1f;color:var(--no)}
+.vx svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round}
+.vempty{color:var(--dim);font-size:13px;margin:0;padding:8px 10px}
 #gear svg{width:19px;height:19px;fill:currentColor}
 button{border:0;background:none;color:inherit;font:inherit;cursor:pointer}
 #go{width:100%;padding:15px;border-radius:999px;background:var(--fg);color:#000;font-weight:600;
@@ -38,7 +65,13 @@ h2{font-size:22px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px}
           vertical-align:middle;background:#ffffff33}
 #legend .in i{background:var(--accent)}
 #legend .out i{background:var(--no)}
-#glist{display:flex;flex-direction:column;gap:7px;max-height:44vh;overflow:auto;margin:14px 0 18px}
+#glist,#chosen{display:flex;flex-direction:column;gap:7px;max-height:44vh;overflow:auto;margin:14px 0 18px}
+#chosen .g{display:flex;justify-content:space-between}
+#chosen .g b{color:var(--no);font-weight:400}
+#sugg{display:flex;flex-direction:column;gap:4px;max-height:200px;overflow:auto;margin-top:8px}
+.s{width:100%;text-align:left;padding:9px 13px;border-radius:9px;background:#ffffff08;color:var(--dim);
+   font-size:14px;transition:.15s}
+.s:hover{background:#ffffff14;color:var(--fg)}
 .g{padding:11px 14px;border-radius:11px;background:#ffffff0a;border-left:3px solid #ffffff26;
    cursor:pointer;text-align:left;user-select:none;font-size:14.5px;
    transition:background .18s,border-color .18s,opacity .18s}
@@ -110,7 +143,7 @@ h1{font-size:21px;font-weight:600;letter-spacing:-.01em;margin:22px 0 3px}
 #volrange{position:absolute;left:calc(100% + 10px);top:50%;transform:translateY(-50%);
           width:0;opacity:0;pointer-events:none;transition:width .22s,opacity .22s}
 #vol.open #volrange{width:104px;opacity:1;pointer-events:auto}
-#msgline{color:var(--dim);font-size:14px;min-height:22px;margin:14px 0 0}
+#msgline{position:absolute;top:100%;left:0;right:0;color:var(--dim);font-size:14px;margin:14px 0 0}
 #slow:not([hidden]){display:block}
 #slow{color:#5c5c64;font-size:12.5px}
 #back{display:block;margin:12px auto 0;padding:6px 12px;color:var(--dim);font-size:13px;
@@ -121,6 +154,22 @@ h1{font-size:21px;font-weight:600;letter-spacing:-.01em;margin:22px 0 3px}
 <a href="/settings" id=gear title=Settings hidden>
   <svg viewBox="0 0 24 24"><path d="M19.4 13a7.8 7.8 0 0 0 0-2l2-1.6-2-3.4-2.5 1a7.6 7.6 0 0 0-1.7-1L14.8 3h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.4L6.6 11a7.8 7.8 0 0 0 0 2l-2 1.6 2 3.4 2.5-1c.5.4 1.1.8 1.7 1l.4 2.6h4l.4-2.6c.6-.2 1.2-.6 1.7-1l2.5 1 2-3.4zm-6.6 2.4a3.4 3.4 0 1 1 0-6.8 3.4 3.4 0 0 1 0 6.8z"/></svg>
 </a>
+<aside id=votes hidden>
+  <div class=vrow>
+    <button class=vbtn id=vlike title="songs you liked">
+      <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.7-9A5.4 5.4 0 0 1 12 6.1a5.4 5.4 0 0 1 9.7 5.9C19.5 16.4 12 21 12 21z"/></svg>
+    </button>
+  </div>
+  <div class=vlist id=llist hidden></div>
+  <div id=vhalf>
+    <div class=vrow>
+      <button class=vbtn id=vdis title="songs you disliked">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" fill=none stroke=currentColor stroke-width=3.2 stroke-linecap=round /></svg>
+      </button>
+    </div>
+    <div class=vlist id=dlist hidden></div>
+  </div>
+</aside>
 <main>
   <p id=notice hidden><span id=noticetext></span> <a id=grab href="#">Download it now.</a></p>
   <div id=loading hidden>
@@ -138,19 +187,28 @@ h1{font-size:21px;font-weight:600;letter-spacing:-.01em;margin:22px 0 3px}
   <section id=setup hidden>
     <div id=step0>
       <h2>Welcome</h2>
-      <p class=sub>What should your taste be based on?</p>
+      <p class=sub>What should the suggestions be based off?</p>
       <div id=srcrow>
-        <button class=src data-v=all>everything on your recents</button>
-        <button class=src data-v=saved>only saved</button>
+        <button class=src data-v=manual>Let me choose</button>
+        <button class=src data-v=library>My recent tracks</button>
       </div>
     </div>
     <div id=step1 hidden>
-      <h2>Your genres</h2>
-      <p class=sub>Tap to change.</p>
-      <div id=legend>
-        <span><i></i>neutral</span><span class=in><i></i>always</span><span class=out><i></i>never</span>
+      <div id=auto>
+        <h2>Your genres</h2>
+        <p class=sub>Tap to change.</p>
+        <div id=legend>
+          <span><i></i>neutral</span><span class=in><i></i>always</span><span class=out><i></i>never</span>
+        </div>
+        <div id=glist></div>
       </div>
-      <div id=glist></div>
+      <div id=manual hidden>
+        <h2>Pick your genres</h2>
+        <p class=sub>Search and add as many as you like, tap one to remove it.</p>
+        <div class=f><input id=q placeholder="add a genre..." autocomplete=off spellcheck=false></div>
+        <div id=sugg></div>
+        <div id=chosen></div>
+      </div>
     </div>
     <div id=step2 hidden>
       <h2>New genres</h2>
@@ -161,7 +219,7 @@ h1{font-size:21px;font-weight:600;letter-spacing:-.01em;margin:22px 0 3px}
       </div>
       <div class=obsblock id=obsblock0>
         <div class=obshead><span>obscurity</span><span class=val id=obsval>1.0</span></div>
-        <p class=obshint>0 = can recieve famous songs, 1 = no preference, 3 = only niche songs</p>
+        <p class=obshint>0 = can receive famous songs, 1 = no preference, 3 = only niche songs</p>
         <input type=range id=obs min=0 max=3 step=0.1>
       </div>
       <div id=ultrarow0>
@@ -200,15 +258,15 @@ h1{font-size:21px;font-weight:600;letter-spacing:-.01em;margin:22px 0 3px}
     </div>
     <p id=why></p>
   </div>
-  <p id=msgline><span id=msg></span><span id=slow hidden>Taking longer than expected…</span></p>
   <button id=go hidden></button>
   <button id=back hidden>back</button>
+  <p id=msgline><span id=msg></span><span id=slow hidden>Taking longer than expected…</span></p>
 </main>
 <script>
 const $ = i => document.getElementById(i);
 const audio = new Audio();
 const CYCLE = {'': 'in', 'in': 'out', 'out': ''};
-let mode, step = 0, states = {}, source = 'all';
+let mode, step = 0, states = {}, taste = 'library', chosen = [], suggestions = null;
 
 audio.ontimeupdate = () => $('fill').style.width = (audio.currentTime / (audio.duration || 30)) * 100 + '%';
 audio.onended = () => { $('pp').setAttribute('d', 'M8 5v14l11-7z'); $('fill').style.width = '0%'; };
@@ -243,11 +301,12 @@ $('obs').oninput = paintSlider;
 
 const SPEAKER = 'M3 10v4h4l5 4V6L7 10H3zm13.5 2a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z';
 const MUTED = 'M3 10v4h4l5 4V6L7 10H3zm16.6 1.4L18.2 10l-1.7 1.7L14.8 10l-1.4 1.4 1.7 1.6-1.7 1.6 1.4 1.4 1.7-1.7 1.7 1.7 1.4-1.4-1.7-1.6z';
+const MAX_VOLUME = 0.25;  
 let volTimer;
 function paintVolume() {
   const v = $('volrange');
   v.style.setProperty('--pct', v.value * 100 + '%');
-  audio.volume = parseFloat(v.value);
+  audio.volume = parseFloat(v.value) * MAX_VOLUME;
   $('volpath').setAttribute('d', parseFloat(v.value) === 0 ? MUTED : SPEAKER);
   try { localStorage.setItem('volume', v.value); } catch (e) {}
 }
@@ -267,10 +326,49 @@ document.addEventListener('click', () => {
 });
 try { $('volrange').value = localStorage.getItem('volume') ?? .5; } catch (e) { $('volrange').value = .5; }
 paintVolume();
-document.querySelectorAll('.src').forEach(b => b.onclick = () => {
-  source = b.dataset.v;
-  document.querySelectorAll('.src').forEach(x => x.classList.toggle('on', x === b));
-});
+function pickTaste(v) {
+  taste = v;
+  document.querySelectorAll('.src').forEach(x => x.classList.toggle('on', x.dataset.v === v));
+}
+document.querySelectorAll('.src').forEach(b => b.onclick = () => pickTaste(b.dataset.v));
+
+function drawChosen() {
+  $('chosen').innerHTML = '';
+  for (const name of chosen) {
+    const el = document.createElement('div');
+    el.className = 'g in';
+    const x = document.createElement('b');
+    x.textContent = '×';
+    el.append(name, x);
+    el.onclick = () => { chosen = chosen.filter(o => o !== name); drawChosen(); drawSugg(); };
+    $('chosen').appendChild(el);
+  }
+}
+function drawSugg() {
+  const q = $('q').value.trim().toLowerCase();
+  $('sugg').innerHTML = '';
+  if (!q || !suggestions) return;
+  const have = new Set(chosen.map(c => c.toLowerCase()));
+  const hits = suggestions.filter(t => t.toLowerCase().includes(q) && !have.has(t.toLowerCase()));
+  hits.sort((a, b) => b.toLowerCase().startsWith(q) - a.toLowerCase().startsWith(q));
+  for (const t of hits.slice(0, 8)) {
+    const b = document.createElement('button');
+    b.className = 's'; b.textContent = t;
+    b.onclick = () => addGenre(t);
+    $('sugg').appendChild(b);
+  }
+}
+async function addGenre(name) {
+  $('msg').textContent = 'checking ' + name + '…';
+  const r = await (await fetch('/api/addtag?t=' + encodeURIComponent(name))).json();
+  if (!r.ok) { $('msg').textContent = 'no such genre on Last.fm: ' + name; return; }
+  $('msg').textContent = '';
+  if (!chosen.some(c => c.toLowerCase() === r.name.toLowerCase())) chosen.push(r.name);
+  $('q').value = '';
+  drawChosen(); drawSugg();
+}
+$('q').oninput = drawSugg;
+$('q').onkeydown = e => { if (e.key === 'Enter' && $('q').value.trim()) addGenre($('q').value.trim()); };
 
 function show(r) {
   audio.pause(); audio.src = r.preview; $('fill').style.width = '0%';
@@ -320,11 +418,52 @@ function marks(r) {
   $('like').classList.toggle('on', !!r.liked);
   $('dislike').classList.toggle('on', !!r.disliked);
   $('reroll').hidden = r.rerolls_left === 0;
-  $('msg').textContent = r.error || (r.liked ? 'come back tomorrow' : '');
+  $('msg').textContent = r.error || '';
 }
 async function judge(kind) {
   marks(await (await fetch('/api/' + kind)).json());
+  if (!$('llist').hidden || !$('dlist').hidden) drawVotes();
 }
+
+async function unvote(key) {
+  const r = await (await fetch('/api/unvote', {method: 'POST', body: JSON.stringify({key})})).json();
+  if (r.card) marks(r.card);
+  drawVotes(r);
+}
+
+async function drawVotes(v) {
+  v = v || await (await fetch('/api/votes')).json();
+  for (const [kind, id] of [['liked', 'llist'], ['disliked', 'dlist']]) {
+    $(id).innerHTML = '';
+    if (!v[kind].length) $(id).innerHTML = '<p class=vempty>nothing yet</p>';
+    for (const t of v[kind]) {
+      const row = document.createElement('div'), text = document.createElement('div');
+      const title = document.createElement('b'), artist = document.createElement('small');
+      title.textContent = t.title; artist.textContent = t.artist;
+      text.append(title, artist);
+      row.className = 'vi'; row.append(text);
+      if (t.genre) {
+        const g = document.createElement('i');
+        g.textContent = g.title = t.genre;
+        row.append(g);
+      }
+      const x = document.createElement('button');
+      x.className = 'vx'; x.title = 'remove';
+      x.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+      x.onclick = () => unvote(t.key);
+      row.append(x);
+      $(id).appendChild(row);
+    }
+  }
+}
+function toggleVotes(btn, list) {
+  const open = $(list).hidden;
+  $(list).hidden = !open;
+  $(btn).classList.toggle('on', open);
+  if (open) drawVotes();
+}
+$('vlike').onclick = () => toggleVotes('vlike', 'llist');
+$('vdis').onclick = () => toggleVotes('vdis', 'dlist');
 $('like').onclick = () => judge('like');
 $('dislike').onclick = () => judge('dislike');
 $('reroll').onclick = async () => {
@@ -353,16 +492,10 @@ $('back').onclick = () => { $('msg').textContent = ''; showStep(step - 1); };
 
 async function drawSetup() {
   $('msg').textContent = 'Analysing your listening, this may take a moment\u2026';
-  const g = await (await fetch('/api/genres?source=' + source)).json();
+  const g = await (await fetch('/api/genres')).json();
   $('msg').textContent = g.error || '';
-  if (g.error) return;
+  if (g.error) return false;
   states = g.states;
-  $('newrow').classList.toggle('on', g.new);
-  $('obs').value = g.obscurity;
-  $('ultrarow0').classList.toggle('on', g.ultra);
-  $('obs').disabled = g.ultra;
-  $('obsblock0').classList.toggle('off', g.ultra);
-  paintSlider();
   $('glist').innerHTML = '';
   for (const [name] of g.buckets) {
     const el = document.createElement('div');
@@ -389,6 +522,7 @@ async function boot() {
   $('go').hidden = false;
   $('back').hidden = true;
   $('gear').hidden = mode !== 'today';
+  $('votes').hidden = mode !== 'today';
   if (mode === 'keys') {
     const k = await (await fetch('/api/keys')).json();
     $('k_sp').value = k.spotify_client_id;
@@ -398,8 +532,13 @@ async function boot() {
     $('setup').hidden = false;
     showStep(0);
     const g = await (await fetch('/api/genres?peek=1')).json();
-    source = g.source;
-    document.querySelectorAll('.src').forEach(b => b.classList.toggle('on', b.dataset.v === source));
+    pickTaste(g.mode);
+    $('newrow').classList.toggle('on', g.new);
+    $('obs').value = g.obscurity;
+    $('ultrarow0').classList.toggle('on', g.ultra);
+    $('obs').disabled = g.ultra;
+    $('obsblock0').classList.toggle('off', g.ultra);
+    paintSlider();
   }
 }
 
@@ -438,21 +577,30 @@ $('go').onclick = async () => {
     return;
   }
   if (mode === 'setup') {
+    const manual = taste === 'manual';
     if (step === 0) {
-      await drawSetup();
-      showStep(1);
+      $('auto').hidden = manual;
+      $('manual').hidden = !manual;
+      $('newrow').hidden = manual;
+      if (manual) {
+        suggestions = suggestions || await (await fetch('/api/tags')).json();
+        drawChosen(); drawSugg();
+      }
+      if (manual || await drawSetup() !== false) showStep(1);
       $('go').disabled = false;
       return;
     }
     if (step === 1) {
-      showStep(2);
+      if (manual && !chosen.length) $('msg').textContent = 'pick at least one genre';
+      else showStep(2);
       $('go').disabled = false;
       return;
     }
-    await fetch('/api/prefs', {method: 'POST', body: JSON.stringify(
-      {states, source, new: $('newrow').classList.contains('on'),
-       ultra: $('ultrarow0').classList.contains('on'),
-       obscurity: parseFloat($('obs').value)})});
+    const common = {mode: taste, ultra: $('ultrarow0').classList.contains('on'),
+                    obscurity: parseFloat($('obs').value)};
+    await fetch('/api/prefs', {method: 'POST', body: JSON.stringify(manual
+      ? {...common, extra: chosen, states: Object.fromEntries(chosen.map(c => [c, 'in']))}
+      : {...common, states, new: $('newrow').classList.contains('on')})});
     $('go').disabled = false;
     return boot();
   }
@@ -481,7 +629,7 @@ async function checkUpdate() {
 
 $('grab').onclick = async e => {
   e.preventDefault();
-  for (const id of ['notice', 'gear', 'card', 'setup', 'keys', 'go', 'back'])
+  for (const id of ['notice', 'gear', 'votes', 'card', 'setup', 'keys', 'go', 'back'])
     $(id).hidden = true;
   $('msg').textContent = '';
   $('ltext').textContent = 'downloading\u2026';

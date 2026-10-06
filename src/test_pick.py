@@ -1,4 +1,14 @@
-import json, pathlib, random, app
+import json, random, shutil, tempfile
+from pathlib import Path
+
+import spotify_dump as sp
+
+# work on a copy of data/ so the tests never touch the real history and votes
+REAL_DATA = sp.DATA
+sp.DATA = Path(tempfile.mkdtemp(prefix="daily-rec-test-"))
+shutil.copytree(REAL_DATA, sp.DATA, dirs_exist_ok=True)
+
+import app
 
 HERE = app.DATA
 FILES = ("today.json", "history.json", "feedback.json")
@@ -103,6 +113,61 @@ def test_language_from_tags():
     assert L(["american", "hip hop", "usa"]) is None
     assert L(["uk", "italian rap", "italia"]) == "italian", \
         "a language word still counts, the places around it do not"
+    assert L(["turkish rap", "hip-hop"]) == "turkish"
+    assert L(["mandopop", "pop"]) == "chinese"
+    assert L(["dutch house", "house", "edm"]) is None, "a dance scene is not a language"
+
+
+def test_each_mode_keeps_its_own_genres():
+    import threading, urllib.request
+    path = HERE / "prefs.json"
+    before = path.read_text(encoding="utf-8") if path.exists() else None
+    srv = app.ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    post = lambda body: urllib.request.urlopen(urllib.request.Request(
+        f"http://127.0.0.1:{srv.server_port}/api/settings", json.dumps(body).encode()))
+    try:
+        path.write_text(json.dumps({"mode": "library", "states": {"Rock": "in"}}), encoding="utf-8")
+        library = {"buckets": [["Rock", 3, "out"]], "extra": []}
+        picked = {"buckets": [["Shoegaze", 0, "in"]], "extra": ["Shoegaze"]}
+        post(dict(library, mode="library"))
+        post(dict(library, mode="manual"))  # switching: the page still shows the library genres
+        post(dict(picked, mode="manual"))
+        post(dict(picked, mode="library"))  # and back
+        p = json.loads(path.read_text(encoding="utf-8"))
+        assert p["mode"] == "library"
+        assert (p["states"], p["extra"]) == ({"Rock": "out"}, []), p
+        assert (p["picked"]["states"], p["picked"]["extra"]) == ({"Shoegaze": "in"}, ["shoegaze"]), p
+    finally:
+        srv.shutdown()
+        if before is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.write_text(before, encoding="utf-8")
+
+
+def test_chosen_languages():
+    ok = app.language_allowed
+    assert ok("italian", "", None, {"italian", "english"})
+    assert not ok("spanish", "in", None, {"italian"}), "a green genre does not beat the language pick"
+    assert not ok(app.UNKNOWN, "", None, {"italian"}), "unknown language is skipped once one is picked"
+    assert ok(app.UNKNOWN, "", None, ()), "no pick: any language"
+
+    real_info, real_mb = app.artists_info, app.mb_country
+    tagged = {"Test Tagged": "italian"}
+    app.artists_info = lambda names: {n: {"lang": tagged.get(n, app.UNKNOWN)} for n in names}
+    asked = []
+    app.mb_country = lambda n: asked.append(n) or {"Test Yank": "US", "Test Swiss": "CH"}.get(n, "")
+    try:
+        names = ["Test Tagged", "Test Yank", "Test Swiss", "Test Nobody"]
+        assert app.sung_in(names) == {"Test Tagged": "italian", "Test Yank": "english",
+                                      "Test Swiss": app.UNKNOWN, "Test Nobody": app.UNKNOWN}
+        assert "Test Tagged" not in asked, "tags win, no MusicBrainz call"
+        asked.clear()
+        app.sung_in(names)
+        assert not asked, "countries are cached"
+    finally:
+        app.artists_info, app.mb_country = real_info, real_mb
 
 
 def test_genres_ranked_by_plays():
@@ -130,27 +195,44 @@ def test_focus_noise_ignored():
     assert not app.is_noise("Some Artist", ["rock", "indie"])
 
 
-def test_taste_source():
+def test_taste_counts_every_library_source():
     seeds = {"artists": [{"name": "Top"}],
              "tracks": {"short_term": [{"artist": "Top", "title": f"t{i}"} for i in range(3)]},
              "saved": [{"artist": "Saved", "title": f"s{i}"} for i in range(2)],
              "playlists": [{"artist": "Play", "title": "p"}]}
-    assert app.play_counts(seeds, "all") == {"Top": 3, "Saved": 2, "Play": 1}
-    assert app.play_counts(seeds, "saved") == {"Saved": 2}
-    assert [a["name"] for a in app.taste_artists(seeds, "saved")] == ["Saved"]
-    assert app.taste_artists(seeds, "all") == seeds["artists"]
+    assert app.play_counts(seeds) == {"Top": 3, "Saved": 2, "Play": 1}
+    assert app.taste_artists(seeds) == seeds["artists"]
 
 
 def test_track_overrides():
     seeds = {"artists": [{"name": "A"}],
              "tracks": {"short_term": [{"artist": "A", "title": "One"}]},
              "saved": [{"artist": "B", "title": "Two"}], "playlists": []}
-    assert app.play_counts(seeds, "all") == {"A": 1, "B": 1}
-    assert app.play_counts(seeds, "saved") == {"B": 1}
     off = {app.sp.key("B", "Two"): False}
-    assert app.play_counts(seeds, "saved", off) == {}
-    on = {app.sp.key("A", "One"): True}
-    assert app.play_counts(seeds, "saved", on) == {"A": 1, "B": 1}
+    assert app.play_counts(seeds, off) == {"A": 1}
+    assert [a["name"] for a in app.taste_artists(seeds, off)] == ["A"]
+
+
+def manual_prefs(**kw):
+    return {"manual": True, "overrides": {}, "removed": set(), "new": False, "languages": [],
+            "extra": ["jazz rap", "shoegaze"], "states": {"Shoegaze": "out", "Jazz": "in"}, **kw}
+
+
+def test_manual_mode_only_uses_the_chosen_genres():
+    prefs = manual_prefs()
+    seeds = {"artists": [{"name": "Library Artist"}], "tracks": {}}
+    real = app.tag_artists
+    app.tag_artists = lambda tag, **kw: [f"{tag} artist {i}" for i in range(10)]
+    try:
+        names = [a["name"] for a in app.seed_order(seeds, prefs, random.Random(1))]
+    finally:
+        app.tag_artists = real
+    assert names and all(n.startswith("jazz rap artist") for n in names), names
+    assert app.taste_tags(seeds, prefs) == ["jazz rap"], "a genre set to never is not dug"
+    # a library genre coloured green in the other mode does not leak in, even in the strict pass
+    assert not app.bucket_allowed("Jazz", "Jazz", True, prefs, {"Jazz"})
+    assert not app.bucket_allowed("Jazz", "Jazz", False, manual_prefs(new=True), {"Jazz"})
+    assert app.bucket_allowed("Jazz Rap", "Jazz Rap", True, prefs, set())
 
 
 def test_like_and_dislike_are_one_switch():
@@ -170,6 +252,43 @@ def test_like_and_dislike_are_one_switch():
     app.vote("dislike")
     app.vote("dislike")
     assert (w(), d()) == (0, {}), "and so does a second dislike"
+
+
+def test_votes_are_listed_newest_first():
+    reset()
+    put_today("First", key="a")
+    app.vote("like")
+    put_today("Second", key="b")
+    app.vote("like")
+    assert [t["artist"] for t in app.voted()["liked"]] == ["Second", "First"]
+    put_today("First", key="a")
+    (HERE / "today.json").write_text(json.dumps({"date": "1970-01-01", "card": dict(
+        json.loads((HERE / "today.json").read_text(encoding="utf-8"))["card"], liked=True)}),
+        encoding="utf-8")
+    app.vote("dislike")
+    v = app.voted()
+    assert [t["artist"] for t in v["liked"]] == ["Second"], "a switched vote leaves the like list"
+    assert [t["artist"] for t in v["disliked"]] == ["First"]
+    app.vote("dislike")
+    assert app.voted() == {"liked": [{"vote": "liked", "title": "T", "artist": "Second", "genre": "",
+                                      "seed": "Seed", "key": "b"}],
+                           "disliked": []}, "un-voting removes it"
+
+
+def test_removing_a_vote_from_the_list_undoes_it():
+    reset()
+    fb = lambda: json.loads((HERE / "feedback.json").read_text(encoding="utf-8"))
+    put_today("Old Artist", seed="Old Seed", key="old")
+    app.vote("dislike")
+    put_today("Today Artist", key="today")
+    app.vote("like")
+    assert app.unvote("old") is None, "not today's card"
+    assert fb()["dislikes"] == {} and fb()["weights"]["Old Seed"] == 0
+    card = app.unvote("today")
+    assert card["key"] == "today" and not card["liked"], "today's card loses its heart too"
+    assert json.loads((HERE / "today.json").read_text(encoding="utf-8"))["card"]["liked"] is False
+    assert fb()["weights"]["Seed"] == 0 and app.voted() == {"liked": [], "disliked": []}
+    assert app.unvote("missing") is None
 
 
 def test_neither_moves_on():
@@ -244,6 +363,9 @@ def test_real_round_network():
         print("  skipped: no config.json or seeds.json, run the app first")
         return
     reset()
+    prefs = json.loads((HERE / "prefs.json").read_text(encoding="utf-8")) if (HERE / "prefs.json").exists() else {}
+    prefs.update(mode="library", languages=[])  # the user's own mode and languages may leave nothing to find
+    (HERE / "prefs.json").write_text(json.dumps(prefs), encoding="utf-8")
     first = app.today()
     assert first["preview"].startswith("http") and first["cover"], first
     assert app.today()["key"] == first["key"], "same day, same track"
@@ -267,15 +389,20 @@ if __name__ == "__main__":
     test_the_search_starts_from_the_right_end()
     test_chasing_hits_never_pays_for_album_lookups()
     test_like_and_dislike_are_one_switch()
+    test_votes_are_listed_newest_first()
+    test_removing_a_vote_from_the_list_undoes_it()
     test_neither_moves_on()
     test_reroll_stops_at_the_limit()
     test_dead_end_keeps_the_card()
     test_language_from_tags()
+    test_chosen_languages()
+    test_each_mode_keeps_its_own_genres()
     test_genres_ranked_by_plays()
     test_focus_noise_ignored()
-    test_taste_source()
+    test_taste_counts_every_library_source()
     test_track_overrides()
+    test_manual_mode_only_uses_the_chosen_genres()
     test_a_cache_survives_parallel_writers()
     test_real_round_network()
-    reset()
+    shutil.rmtree(HERE, ignore_errors=True)
     print("ok")
